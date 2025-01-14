@@ -22,7 +22,7 @@ type Array = boolector::Array<Rc<Btor>>;
 #[derive(Clone, Debug)]
 pub struct Memory {
     btor: Rc<Btor>,
-    mem: Array,
+    pub mem: Array,
     name: String,
     null_detection: bool,
     cell_bytes_as_bv: BV,
@@ -349,7 +349,7 @@ impl Memory {
             return Err(Error::NullPointerDereference);
         }
 
-        let rval = if bits <= Self::CELL_BITS {
+        let mut rval = if bits <= Self::CELL_BITS {
             // special-case small reads because read_small() can handle them directly and efficiently
             self.read_small(addr, bits)
         } else {
@@ -397,6 +397,11 @@ impl Memory {
             }
         };
         debug!("Value read is {:?}", rval);
+        let symbol = (match addr.get_symbol() {
+            Some(s) => s,
+            None => "[unknown]"
+        }).to_owned() + &*format!(" read({bits})").to_owned();
+        rval.set_symbol(Some(&symbol));
         Ok(rval)
     }
 

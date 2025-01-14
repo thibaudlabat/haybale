@@ -626,9 +626,32 @@ impl Memory for crate::cell_memory::Memory {
         crate::cell_memory::Memory::new_zero_initialized(btor, null_detection, name, addr_bits)
     }
     fn read(&self, index: &Self::Index, bits: u32) -> Result<Self::Value> {
+        let index_symbol = match index.get_symbol(){
+            None => {"[unknown]"}
+            Some(s) => {s}
+        };
+        println!("READ\n\tTARGET = {index_symbol}");
         self.read(index, bits)
     }
     fn write(&mut self, index: &Self::Index, value: Self::Value) -> Result<()> {
+       let id = value.get_id();
+        let symbol = value.get_symbol();
+            let concrete = value.as_u64();
+        let value_str_1 = (match symbol {
+            None => { "" }
+            Some(s) => { s }
+        });
+        let value_str_2 = match concrete{
+            None => {""}
+            Some(int) => &*{ int.to_string().clone() }
+        };
+        let value_str = value_str_1.to_owned() + value_str_2;
+        let index_id = index.get_id();
+        let index_symbol = match index.get_symbol(){
+            None => {"[unknown]"}
+            Some(s) => {s}
+        };
+        println!("WRITE\n\tTARGET = {index_symbol}\n\tVALUE = {value_str}");
         self.write(index, value)
     }
     fn get_solver(&self) -> Rc<Btor> {

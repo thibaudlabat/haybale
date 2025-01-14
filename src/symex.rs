@@ -6,7 +6,7 @@ use llvm_ir::*;
 use log::{debug, info};
 use std::convert::TryInto;
 use std::fmt;
-
+use std::ops::Deref;
 // Rust 1.51.0 introduced its own `.reduce()` on the main `Iterator` trait.
 // So, starting with 1.51.0, we don't need `reduce::Reduce`, and in fact it
 // causes a conflict.
@@ -714,8 +714,14 @@ where
                             "SExt return type is an opaque struct type".into(),
                         )
                     })?;
-                self.state
-                    .record_bv_result(sext, bvop.sext(dest_size - source_size))
+
+                let mut result = bvop.sext(dest_size - source_size);
+                let symbol = (match bvop.get_symbol() {
+                    None => { "[unknown]" }
+                    Some(s) => { s }
+                }).to_owned() + " (sext)";
+                result.set_symbol(Some(&*(symbol + " #" + &*result.get_id().to_string())));
+                self.state.record_bv_result(sext, result)
             },
             #[cfg(feature = "llvm-11-or-greater")]
             Type::VectorType { scalable: true, .. } => {
@@ -846,8 +852,18 @@ where
                 "Shouldn't be loading a value of size 0 bits".into(),
             ));
         }
+        let mut r = self.state.read(&bvaddr, dest_size)?;
+
+        let src_str = (match r.get_symbol() {
+            None => { "" }
+            Some(s) => { s }
+        }).to_owned(); //+ " (" + &*load.address.to_string() + ") ";
+
+        let dest_str = load.dest.to_string();
+        let symbol = src_str + " deref(" + &*dest_str + ") ";
+        r.set_symbol(Some(&*(symbol + " #" + &*r.get_id().to_string())));
         self.state
-            .record_bv_result(load, self.state.read(&bvaddr, dest_size)?)
+            .record_bv_result(load, r)
     }
 
     fn symex_store(&mut self, store: &'p instruction::Store) -> Result<()> {
@@ -859,16 +875,66 @@ where
 
     fn symex_gep(&mut self, gep: &'p instruction::GetElementPtr) -> Result<()> {
         debug!("Symexing gep {:?}", gep);
+        let src_str = gep.address.to_string();
+        let mut dest_str = gep.dest.to_string();
+        dest_str += "(";
+        let indices:&Vec<Operand> = &gep.indices;
+        dest_str += &*indices.iter().map(|i| {
+            match i{
+                Operand::ConstantOperand(o) => {
+                    let str = match o.deref(){
+                        Constant::Int {bits,value} => {value.to_string()}
+                        (_)=> { "?".to_string() }
+                    };
+                    str
+                }
+                // LocalOperand, when the array index is a variable
+                Operand::LocalOperand { .. } => {
+                    let index_bv = self.state.operand_to_bv(&i).unwrap();
+                    let sym = index_bv.get_symbol();
+                    match sym{
+                        None => {"[unknown]"}
+                        Some(s) => {s}
+                    }.to_string()
+
+                }
+                Operand::MetadataOperand => {"?".to_string()}
+            }
+        }).join(", ");
+        dest_str += ")";
         match self.state.type_of(gep).as_ref() {
             Type::PointerType { .. } => {
-                let bvbase = self.state.operand_to_bv(&gep.address)?;
+                let mut bvbase = self.state.operand_to_bv(&gep.address)?;
+
+                // do symbols need to be unique..?
+                // I actually just need annotations
+                // could be stored anywhere else, in a map...
+
+                let bvbase_symbol = (match bvbase.get_symbol() {
+                    None => { "" }
+                    Some(s) => { s }
+                }).to_owned(); //+ " (" + &*gep.address.to_string() + ") ";
+
+                bvbase.set_symbol(Some(&*(bvbase_symbol + " #" + &*bvbase.get_id().to_string())));
+
                 let offset = Self::get_offset_recursive(
                     &self.state,
                     gep.indices.iter(),
                     &self.state.type_of(&gep.address),
                     bvbase.get_width(),
                 )?;
-                self.state.record_bv_result(gep, bvbase.add(&offset))
+
+
+                let mut result = bvbase.add(&offset);
+                let result_symbol = (match bvbase.get_symbol() {
+                    None => { "[unkdown]" }
+                    Some(x) => { x }
+                }).to_owned() + " -> " + &dest_str;
+
+                result.set_symbol(Some(&*(result_symbol + " #" + &*result.get_id().to_string())));
+
+                let id = result.get_id();
+                self.state.record_bv_result(gep, result)
             },
             Type::VectorType { .. } => Err(Error::UnsupportedInstruction(
                 "GEP calculating a vector of pointers".to_owned(),

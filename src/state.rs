@@ -46,8 +46,8 @@ pub struct State<'p, B: Backend> {
 
     // Private members
     varmap: VarMap<B::BV>,
-    mem: RefCell<B::Memory>,
-    alloc: Alloc,
+    pub mem: RefCell<B::Memory>,
+    pub alloc: Alloc,
     global_allocations: GlobalAllocations<'p, B>,
     /// Pointer size in bits.
     /// E.g., this will be `64` if we're analyzing code which was compiled for a
@@ -922,10 +922,14 @@ where
     pub fn operand_to_bv(&self, op: &Operand) -> Result<B::BV> {
         match op {
             Operand::ConstantOperand(c) => self.const_to_bv(c),
-            Operand::LocalOperand { name, .. } => Ok(self
-                .varmap
-                .lookup_var(&self.cur_loc.func.name, name)
-                .clone()),
+            Operand::LocalOperand { name, .. } => {
+                let a = self
+                    .varmap
+                    .lookup_var(&self.cur_loc.func.name, name);
+                let b = a.clone();
+                Ok(b)
+            },
+
             Operand::MetadataOperand => panic!("Can't convert {:?} to BV", op),
         }
     }
@@ -1527,6 +1531,7 @@ where
                     // save a backtracking point to re-execute the current
                     // instruction with the address constrained to be non-null,
                     // and continue from there
+
                     self.save_backtracking_point_at_location(
                         self.cur_loc.clone(),
                         addr._ne(&self.zero(addr.get_width())),
