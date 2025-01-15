@@ -957,7 +957,7 @@ where
                 .map(|c| self.const_to_bv(c)) // produces an iterator over Result<B::BV>
                 .reduce(|a, b| Ok(b?.concat(&a?))) // the lambda has type Fn(Result<B::BV>, Result<B::BV>) -> Result<B::BV>
                 .unwrap(), // unwrap the Option<> produced by reduce(), leaving the final return type Result<B::BV>
-            Constant::GlobalReference { name, .. } => {
+            Constant::GlobalReference { name, ty } => {
                 if let Some(ga) = self
                     .global_allocations
                     .get_global_allocation(name, self.cur_loc.module)
@@ -1008,7 +1008,10 @@ where
                                 // Global variables could be zero-element arrays, or structs
                                 // containing zero-element arrays, so we use
                                 // `const_to_bv_maybe_zerowidth()`
-                                if let Some(bv) = self.const_to_bv_maybe_zerowidth(initializer)? {
+                                if let Some(mut bv) = self.const_to_bv_maybe_zerowidth(initializer)? {
+
+                                    bv.set_symbol(Some(&*format!("global({name}, {ty}) #{}",bv.get_id())));
+
                                     // If that returned `None`, the global is a zero-element array,
                                     // in which case we don't want to initialize it (and can't, or
                                     // we'd get a panic about a 0-width BV)

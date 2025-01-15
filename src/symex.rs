@@ -840,7 +840,7 @@ where
 
     fn symex_load(&mut self, load: &'p instruction::Load) -> Result<()> {
         debug!("Symexing load {:?}", load);
-        let bvaddr = self.state.operand_to_bv(&load.address)?;
+        let mut bvaddr = self.state.operand_to_bv(&load.address)?;
         let dest_size = self
             .state
             .size_in_bits(&self.state.type_of(load))
@@ -852,12 +852,27 @@ where
                 "Shouldn't be loading a value of size 0 bits".into(),
             ));
         }
+
+        match &load.address {
+            Operand::ConstantOperand(op_ref) => {
+            let op = op_ref.deref();
+                match op{
+                    Constant::GlobalReference { name,ty } => {
+                        let sym = &*format!("global({name}, {ty})");
+                        bvaddr.set_symbol(Some(sym));
+                    }
+                    (_)=>{ }
+                }
+            }
+            (_) => {}
+        }
+
         let mut r = self.state.read(&bvaddr, dest_size)?;
 
         let src_str = (match r.get_symbol() {
-            None => { "" }
+            None => { "" },
             Some(s) => { s }
-        }).to_owned(); //+ " (" + &*load.address.to_string() + ") ";
+        }).to_owned() ; // + " (" + &*load.address.to_string() + ") ";
 
         let dest_str = load.dest.to_string();
         let symbol = src_str + " deref(" + &*dest_str + ") ";
@@ -893,7 +908,9 @@ where
                     let index_bv = self.state.operand_to_bv(&i).unwrap();
                     let sym = index_bv.get_symbol();
                     match sym{
-                        None => {"[unknown]"}
+                        None => {
+                            "[unknown]"
+                        }
                         Some(s) => {s}
                     }.to_string()
 
@@ -1030,7 +1047,9 @@ where
                     } else {
                         allocation_size_bits
                     };
-                    let allocated = self.state.allocate(allocation_size_bits);
+                    let mut allocated = self.state.allocate(allocation_size_bits);
+                    let sym = format!("alloca({})",alloca.dest.to_string());
+                    allocated.set_symbol(Some(&*sym));
                     self.state.record_bv_result(alloca, allocated)
                 },
                 c => Err(Error::UnsupportedInstruction(format!(

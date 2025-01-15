@@ -399,7 +399,9 @@ impl Memory {
         debug!("Value read is {:?}", rval);
         let symbol = (match addr.get_symbol() {
             Some(s) => s,
-            None => "[unknown]"
+            None => {
+                "[unknown]"
+            }
         }).to_owned() + &*format!(" read({bits})").to_owned();
         rval.set_symbol(Some(&symbol));
         Ok(rval)
