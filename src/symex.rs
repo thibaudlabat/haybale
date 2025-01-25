@@ -719,8 +719,8 @@ where
                 let symbol = (match bvop.get_symbol() {
                     None => { "[unknown]" }
                     Some(s) => { s }
-                }).to_owned() + " (sext)";
-                result.set_symbol(Some(&*(symbol + " #" + &*result.get_id().to_string())));
+                }).to_owned() + " (sext)" + " #" + &*result.get_id().to_string();
+                self.state.bv_symbols_map.insert(result.get_id(), symbol);
                 self.state.record_bv_result(sext, result)
             },
             #[cfg(feature = "llvm-11-or-greater")]
@@ -875,8 +875,8 @@ where
         }).to_owned() ; // + " (" + &*load.address.to_string() + ") ";
 
         let dest_str = load.dest.to_string();
-        let symbol = src_str + " deref(" + &*dest_str + ") ";
-        r.set_symbol(Some(&*(symbol + " #" + &*r.get_id().to_string())));
+        let symbol = src_str + " deref(" + &*dest_str + ") " + " #" + &*r.get_id().to_string();
+        self.state.bv_symbols_map.insert(r.get_id(), symbol);
         self.state
             .record_bv_result(load, r)
     }
@@ -932,7 +932,8 @@ where
                     Some(s) => { s }
                 }).to_owned(); //+ " (" + &*gep.address.to_string() + ") ";
 
-                bvbase.set_symbol(Some(&*(bvbase_symbol + " #" + &*bvbase.get_id().to_string())));
+                let symbol = bvbase_symbol + " #" + &*bvbase.get_id().to_string();
+                self.state.bv_symbols_map.insert(bvbase.get_id(), symbol);
 
                 let offset = Self::get_offset_recursive(
                     &self.state,
@@ -946,9 +947,8 @@ where
                 let result_symbol = (match bvbase.get_symbol() {
                     None => { "[unkdown]" }
                     Some(x) => { x }
-                }).to_owned() + " -> " + &dest_str;
-
-                result.set_symbol(Some(&*(result_symbol + " #" + &*result.get_id().to_string())));
+                }).to_owned() + " -> " + &dest_str  + " #" + &*result.get_id().to_string();
+                self.state.bv_symbols_map.insert(result.get_id(), result_symbol);
 
                 let id = result.get_id();
                 self.state.record_bv_result(gep, result)
@@ -1049,7 +1049,7 @@ where
                     };
                     let mut allocated = self.state.allocate(allocation_size_bits);
                     let sym = format!("alloca({})",alloca.dest.to_string());
-                    allocated.set_symbol(Some(&*sym));
+                    self.state.bv_symbols_map.insert(allocated.get_id(), sym);
                     self.state.record_bv_result(alloca, allocated)
                 },
                 c => Err(Error::UnsupportedInstruction(format!(
