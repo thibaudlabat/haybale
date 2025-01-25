@@ -490,7 +490,6 @@ where
             config,
             bv_symbols_map: Default::default(),
         };
-        state.mem.get_mut().set_bv_symbols_map(state.bv_symbols_map);
 
 
         // Here we do allocation of the global variables in the Project.
@@ -1528,7 +1527,7 @@ where
 
     /// Read a value `bits` bits long from memory at `addr`.
     /// Note that `bits` can be arbitrarily large.
-    pub fn read(&self, addr: &B::BV, bits: u32) -> Result<B::BV> {
+    pub fn read(&mut self, addr: &B::BV, bits: u32) -> Result<B::BV> {
         let retval = match self.mem.borrow().read(addr, bits) {
             Ok(val) => val,
             e @ Err(Error::NullPointerDereference) => {
@@ -1557,6 +1556,16 @@ where
                 name, watchpoint, pretty_loc
             );
         }
+
+        let symbol = (match self.bv_symbols_map.get(&addr.get_id()){
+            Some(s) => s,
+            None => {
+                "[unknown]"
+            }
+        }).to_owned() + &*format!(" read({bits})").to_owned();
+        self.bv_symbols_map.insert(retval.get_id(), symbol.clone());
+
+        println!("READ\n\tTARGET = {symbol}");
         Ok(retval)
     }
 

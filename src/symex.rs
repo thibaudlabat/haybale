@@ -716,7 +716,7 @@ where
                     })?;
 
                 let mut result = bvop.sext(dest_size - source_size);
-                let symbol = (match bvop.get_symbol() {
+                let symbol = (match self.state.bv_symbols_map.get(&bvop.get_id()) {
                     None => { "[unknown]" }
                     Some(s) => { s }
                 }).to_owned() + " (sext)" + " #" + &*result.get_id().to_string();
@@ -869,7 +869,7 @@ where
 
         let mut r = self.state.read(&bvaddr, dest_size)?;
 
-        let src_str = (match r.get_symbol() {
+        let src_str = (match self.state.bv_symbols_map.get(&r.get_id()) {
             None => { "" },
             Some(s) => { s }
         }).to_owned() ; // + " (" + &*load.address.to_string() + ") ";
@@ -885,6 +885,25 @@ where
         debug!("Symexing store {:?}", store);
         let bvval = self.state.operand_to_bv(&store.value)?;
         let bvaddr = self.state.operand_to_bv(&store.address)?;
+
+        let id = bvval.get_id();
+        let symbol = bvval.get_symbol();
+        let concrete = bvval.as_u64();
+        let value_str_1 = (match symbol {
+            None => { "" }
+            Some(s) => { s }
+        });
+        let value_str_2 = match concrete{
+            None => {""}
+            Some(int) => &*{ int.to_string().clone() }
+        };
+        let value_str = value_str_1.to_owned() + value_str_2;
+        let index_id = bvaddr.get_id();
+        let index_symbol = match self.state.bv_symbols_map.get(&bvaddr.get_id()) {
+            None => {"[unknown]"}
+            Some(s) => {s}
+        };
+        println!("WRITE\n\tTARGET = {index_symbol}\n\tVALUE = {value_str}");
         self.state.write(&bvaddr, bvval)
     }
 
@@ -906,8 +925,7 @@ where
                 // LocalOperand, when the array index is a variable
                 Operand::LocalOperand { .. } => {
                     let index_bv = self.state.operand_to_bv(&i).unwrap();
-                    let sym = index_bv.get_symbol();
-                    match sym{
+                    match self.state.bv_symbols_map.get(&index_bv.get_id()){
                         None => {
                             "[unknown]"
                         }
@@ -927,7 +945,7 @@ where
                 // I actually just need annotations
                 // could be stored anywhere else, in a map...
 
-                let bvbase_symbol = (match bvbase.get_symbol() {
+                let bvbase_symbol = (match self.state.bv_symbols_map.get(&bvbase.get_id()) {
                     None => { "" }
                     Some(s) => { s }
                 }).to_owned(); //+ " (" + &*gep.address.to_string() + ") ";
@@ -944,7 +962,7 @@ where
 
 
                 let mut result = bvbase.add(&offset);
-                let result_symbol = (match bvbase.get_symbol() {
+                let result_symbol = (match self.state.bv_symbols_map.get(&bvbase.get_id()) {
                     None => { "[unkdown]" }
                     Some(x) => { x }
                 }).to_owned() + " -> " + &dest_str  + " #" + &*result.get_id().to_string();
