@@ -1565,10 +1565,10 @@ where
             None => {
                 "[unknown]"
             }
-        }).to_owned() + &*format!(" read({bits})").to_owned();
+        }).to_owned() + &*format!(" read({bits})").to_owned() + " #"+ &*addr.get_id().to_string();
         self.bv_symbols_map.insert(addr.get_id(), symbol.clone());
 
-        let symbol_val = symbol.clone() + " readval()";
+        let symbol_val = symbol.clone() + " readval() #"+ &*retval.get_id().to_string();
         self.bv_symbols_map.insert(retval.get_id(), symbol_val.clone());
 
         self.recorded_operations.push(RecordedOperation::Read(symbol, symbol_val));

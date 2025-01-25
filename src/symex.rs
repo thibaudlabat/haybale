@@ -871,7 +871,7 @@ where
         let mut r = self.state.read(&bvaddr, dest_size)?;
 
         let src_str = (match self.state.bv_symbols_map.get(&r.get_id()) {
-            None => { "" },
+            None => { "[unknown src at load]" },
             Some(s) => { s }
         }).to_owned() ; // + " (" + &*load.address.to_string() + ") ";
 
@@ -888,10 +888,9 @@ where
         let bvaddr = self.state.operand_to_bv(&store.address)?;
 
         let id = bvval.get_id();
-        let symbol = bvval.get_symbol();
         let concrete = bvval.as_u64();
-        let value_str_1 = (match symbol {
-            None => { "" }
+        let value_str_1 = (match self.state.bv_symbols_map.get(&bvval.get_id()) {
+            None => { "" } //
             Some(s) => { s }
         });
         let value_str_2 = match concrete{
@@ -945,9 +944,14 @@ where
                 // do symbols need to be unique..?
                 // I actually just need annotations
                 // could be stored anywhere else, in a map...
-
-                let bvbase_symbol = (match self.state.bv_symbols_map.get(&bvbase.get_id()) {
-                    None => { "" }
+                // This symbol comes from Haybale! do not replace with bv_symbols_map access
+                let bvbase_symbol = (match bvbase.get_symbol() {
+                    None => {
+                        match self.state.bv_symbols_map.get(&bvbase.get_id()) {
+                            None => { "[unknown at gep]" }
+                            Some(s) => { s }
+                        }
+                    }
                     Some(s) => { s }
                 }).to_owned(); //+ " (" + &*gep.address.to_string() + ") ";
 
