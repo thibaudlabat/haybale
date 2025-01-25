@@ -52,6 +52,7 @@ use solver_utils::PossibleSolutions;
 
 #[cfg(test)]
 mod test_utils;
+mod masterthesis;
 
 /// A simple enum describing either an integer value or a pointer
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]

@@ -46,7 +46,7 @@ pub struct State<'p, B: Backend> {
 
     // Private members
     varmap: VarMap<B::BV>,
-    pub mem: RefCell<B::Memory>,
+    pub mem: RefCell<B::Memory<'p>>,
     pub alloc: Alloc,
     global_allocations: GlobalAllocations<'p, B>,
     /// Pointer size in bits.
@@ -372,7 +372,7 @@ struct BacktrackPoint<'p, B: Backend> {
     /// Copies of a `Memory` should be cheap (just a Boolector refcounted
     /// pointer), so it's not a huge concern that we need a full copy here in
     /// order to revert later.
-    mem: B::Memory,
+    mem: B::Memory<'p>,
     /// The length of `path` at the `BacktrackPoint`.
     /// If we ever revert to this `BacktrackPoint`, we will truncate the `path` to
     /// its first `path_len` entries.
@@ -409,16 +409,11 @@ where
             pointer_size_bits: project.pointer_size_bits(),
             proj: project,
             varmap: VarMap::new(solver.clone(), config.loop_bound),
-            mem: RefCell::new(Memory::new_uninitialized(
-                solver.clone(),
-                match config.null_pointer_checking {
+            mem: RefCell::new(Memory::new_uninitialized(solver.clone(), match config.null_pointer_checking {
                     NullPointerChecking::Simple => true,
                     NullPointerChecking::SplitPath => true,
                     NullPointerChecking::None => false,
-                },
-                None,
-                project.pointer_size_bits(),
-            )),
+                }, None, project.pointer_size_bits(), )),
             alloc: Alloc::new(),
             global_allocations: GlobalAllocations::new(),
             intrinsic_hooks: {
@@ -495,6 +490,9 @@ where
             config,
             bv_symbols_map: Default::default(),
         };
+        state.mem.get_mut().set_bv_symbols_map(state.bv_symbols_map);
+
+
         // Here we do allocation of the global variables in the Project.
         // We can do _initialization_ lazily (on first reference to the global
         // variable), but we need to do all the _allocation_ up front,
@@ -1013,7 +1011,8 @@ where
                                 // `const_to_bv_maybe_zerowidth()`
                                 if let Some(mut bv) = self.const_to_bv_maybe_zerowidth(initializer)? {
 
-                                    bv.set_symbol(Some(&*format!("global({name}, {ty}) #{}",bv.get_id())));
+                                    // TODO THESIS: record ça dans l' "AST"
+                                    // bv.set_symbol(Some(&*format!("global({name}, {ty}) #{}",bv.get_id())));
 
                                     // If that returned `None`, the global is a zero-element array,
                                     // in which case we don't want to initialize it (and can't, or

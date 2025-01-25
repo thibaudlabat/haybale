@@ -1,17 +1,19 @@
 //! Traits which abstract over the backend (BV types, memory implementation,
 //! etc) being used.
 
+use std::cell::RefCell;
 use crate::error::Result;
 use boolector::{BVSolution, Btor};
 use std::fmt;
 use std::ops::Deref;
 use std::rc::Rc;
+use crate::masterthesis::BvSymbolsMap;
 
 /// A `Backend` is just a collection of types which together implement the necessary traits
 pub trait Backend: Clone {
     type SolverRef: SolverRef<BV = Self::BV>;
     type BV: BV<SolverRef = Self::SolverRef>;
-    type Memory: Memory<SolverRef = Self::SolverRef, Index = Self::BV, Value = Self::BV>;
+    type Memory<'a>: Memory<SolverRef = Self::SolverRef, Index = Self::BV, Value = Self::BV>;
 }
 
 /// Trait for something which acts as a reference to a `boolector::Btor` (and
@@ -328,7 +330,7 @@ pub trait Memory: Clone + PartialEq + Eq {
         solver: Self::SolverRef,
         null_detection: bool,
         name: Option<&str>,
-        addr_bits: u32,
+        addr_bits: u32
     ) -> Self;
 
     /// A new `Memory`, whose contents at all addresses are initialized to be `0`
@@ -344,7 +346,7 @@ pub trait Memory: Clone + PartialEq + Eq {
         solver: Self::SolverRef,
         null_detection: bool,
         name: Option<&str>,
-        addr_bits: u32,
+        addr_bits: u32
     ) -> Self;
 
     /// Read any number (>0) of bits of memory, at any alignment.
@@ -365,6 +367,8 @@ pub trait Memory: Clone + PartialEq + Eq {
     /// variables should have been added since the call to
     /// `SolverRef::duplicate()`.
     fn change_solver(&mut self, new_solver: Self::SolverRef);
+
+    fn set_bv_symbols_map(&mut self, bv_symbols_map: RefCell<BvSymbolsMap>);
 }
 
 /// Some prototypical `BV` and `Memory` implementations:
@@ -613,7 +617,7 @@ impl Memory for crate::cell_memory::Memory {
         btor: Rc<Btor>,
         null_detection: bool,
         name: Option<&str>,
-        addr_bits: u32,
+        addr_bits: u32
     ) -> Self {
         crate::cell_memory::Memory::new_uninitialized(btor, null_detection, name, addr_bits)
     }
@@ -621,7 +625,7 @@ impl Memory for crate::cell_memory::Memory {
         btor: Rc<Btor>,
         null_detection: bool,
         name: Option<&str>,
-        addr_bits: u32,
+        addr_bits: u32
     ) -> Self {
         crate::cell_memory::Memory::new_zero_initialized(btor, null_detection, name, addr_bits)
     }
@@ -660,6 +664,10 @@ impl Memory for crate::cell_memory::Memory {
     fn change_solver(&mut self, new_btor: Rc<Btor>) {
         self.change_solver(new_btor)
     }
+
+    fn set_bv_symbols_map<'a>(&mut self, bv_symbols_map: RefCell<BvSymbolsMap>) {
+        self.bv_symbols_map = Some(bv_symbols_map);
+    }
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -668,5 +676,5 @@ pub struct CellMemoryBackend {}
 impl Backend for CellMemoryBackend {
     type SolverRef = Rc<Btor>;
     type BV = boolector::BV<Rc<Btor>>;
-    type Memory = crate::cell_memory::Memory;
+    type Memory<'a> = crate::cell_memory::Memory;
 }
