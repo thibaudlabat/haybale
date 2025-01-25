@@ -662,41 +662,6 @@ impl Memory for crate::cell_memory::Memory {
     }
 }
 
-impl Memory for crate::simple_memory::Memory {
-    type SolverRef = Rc<Btor>;
-    type Index = boolector::BV<Rc<Btor>>;
-    type Value = boolector::BV<Rc<Btor>>;
-
-    fn new_uninitialized(
-        btor: Rc<Btor>,
-        null_detection: bool,
-        name: Option<&str>,
-        addr_bits: u32,
-    ) -> Self {
-        crate::simple_memory::Memory::new_uninitialized(btor, null_detection, name, addr_bits)
-    }
-    fn new_zero_initialized(
-        btor: Rc<Btor>,
-        null_detection: bool,
-        name: Option<&str>,
-        addr_bits: u32,
-    ) -> Self {
-        crate::simple_memory::Memory::new_zero_initialized(btor, null_detection, name, addr_bits)
-    }
-    fn read(&self, index: &Self::Index, bits: u32) -> Result<Self::Value> {
-        self.read(index, bits)
-    }
-    fn write(&mut self, index: &Self::Index, value: Self::Value) -> Result<()> {
-        self.write(index, value)
-    }
-    fn get_solver(&self) -> Rc<Btor> {
-        self.get_solver()
-    }
-    fn change_solver(&mut self, new_btor: Rc<Btor>) {
-        self.change_solver(new_btor)
-    }
-}
-
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct CellMemoryBackend {}
 
@@ -704,13 +669,4 @@ impl Backend for CellMemoryBackend {
     type SolverRef = Rc<Btor>;
     type BV = boolector::BV<Rc<Btor>>;
     type Memory = crate::cell_memory::Memory;
-}
-
-#[derive(PartialEq, Eq, Clone, Debug)]
-pub struct DefaultBackend {}
-
-impl Backend for DefaultBackend {
-    type SolverRef = Rc<Btor>;
-    type BV = boolector::BV<Rc<Btor>>;
-    type Memory = crate::simple_memory::Memory;
 }
