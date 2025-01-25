@@ -93,6 +93,8 @@ pub struct State<'p, B: Backend> {
     /// anyway, and function pointers _probably_ resolve to the same value on
     /// multiple paths.
     function_ptr_cache: HashMap<Location<'p>, u64>,
+
+    pub bv_symbols_map : HashMap<i32, String>,
 }
 
 /// Describes a location in LLVM IR in a format more suitable for printing - for
@@ -491,6 +493,7 @@ where
             // listed last (out-of-order) so that they can be used above but moved in now
             solver,
             config,
+            bv_symbols_map: Default::default(),
         };
         // Here we do allocation of the global variables in the Project.
         // We can do _initialization_ lazily (on first reference to the global

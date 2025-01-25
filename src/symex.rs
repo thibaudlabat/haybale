@@ -858,8 +858,8 @@ where
             let op = op_ref.deref();
                 match op{
                     Constant::GlobalReference { name,ty } => {
-                        let sym = &*format!("global({name}, {ty})");
-                        bvaddr.set_symbol(Some(sym));
+                        let sym = format!("global({name}, {ty})");
+                        self.state.bv_symbols_map.insert(bvaddr.get_id(), sym);
                     }
                     (_)=>{ }
                 }
