@@ -17,6 +17,7 @@ use crate::backend::*;
 use crate::config::*;
 use crate::error::*;
 use crate::function_hooks::*;
+use crate::masterthesis::RecordedOperation;
 use crate::parameter_val::ParameterVal;
 use crate::project::Project;
 use crate::return_value::*;
@@ -903,7 +904,7 @@ where
             None => {"[unknown]"}
             Some(s) => {s}
         };
-        println!("WRITE\n\tTARGET = {index_symbol}\n\tVALUE = {value_str}");
+        self.state.recorded_operations.push(RecordedOperation::Write(index_symbol.to_string(), value_str));
         self.state.write(&bvaddr, bvval)
     }
 
@@ -1404,6 +1405,59 @@ where
     ///
     /// If the returned value is `Ok(None)`, then we finished the call normally, and execution should continue from here.
     fn symex_call(&mut self, call: &'p instruction::Call) -> Result<Option<ReturnValue<B::BV>>> {
+        let function_name; // = "[unknown]".to_string();
+        match &call.function {
+            Either::Left(_inline_asm) => {
+                panic!("inline assembly");
+            }
+            Either::Right(operand) => {
+                match operand {
+                    Operand::ConstantOperand(const_op) => {
+                        let x = const_op.deref();
+                        let str = x.to_string();
+                        function_name = str;
+                    }
+                    _ => {
+                        // indirect function call ?
+                        panic!("non const operand function at call");
+                    }
+                }
+            }
+        }
+
+        if call
+            .arguments
+            .iter()
+            .any(|e| matches!(e.0, Operand::MetadataOperand))
+        {
+            // println!("Call to '{function_name}' with Metadata Operand");
+             }
+else {
+
+    // println!("Call to '{function_name}':");
+    let mut i = 0;
+    let mut recorded_arguments:Vec<String> = vec![];
+    for arg in &call.arguments {
+        let operand: &Operand = &arg.0;
+        match operand {
+            Operand::MetadataOperand => {
+                panic!("unexpected metadata operand");
+            }
+            _ => {}
+        }
+        let bv = self.state.operand_to_bv(operand).unwrap();
+        let symbol = match self.state.bv_symbols_map.get(&bv.get_id()) {
+            None => &"[unknown]".to_string(),
+            Some(s) => s,
+        };
+        recorded_arguments.push(symbol.clone());
+        i += 1;
+    }
+    self.state.recorded_operations.push(RecordedOperation::Call(function_name, recorded_arguments));
+}
+
+
+
         debug!("Symexing call {:?}", call);
         match self.resolve_function(&call.function)? {
             ResolvedFunction::HookActive { hook, hooked_thing } => {

@@ -100,3 +100,5 @@ impl SolutionValue {
         }
     }
 }
+
+pub use masterthesis::RecordedOperation;

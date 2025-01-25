@@ -70,4 +70,4 @@ llvm-14-strict = ["llvm-14", "llvm-ir/llvm-14-strict"]
 
 [package.metadata.docs.rs]
 # Generate docs.rs documentation with the llvm-10 feature
-features = ["llvm-10"]
+features = ["llvm-14"]

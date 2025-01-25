@@ -1,5 +1,5 @@
 use boolector::option::{BtorOption, ModelGen};
-use boolector::BVSolution;
+use boolector::{Array, BVSolution};
 use either::Either;
 use itertools::Itertools;
 use llvm_ir::types::{FPType, NamedStructDef, Typed};
@@ -26,6 +26,7 @@ use crate::error::*;
 use crate::function_hooks::{self, FunctionHooks};
 use crate::global_allocations::*;
 use crate::hooks;
+use crate::masterthesis::RecordedOperation;
 use crate::project::Project;
 use crate::solver_utils::{self, PossibleSolutions};
 use crate::varmap::{RestoreInfo, VarMap};
@@ -95,6 +96,7 @@ pub struct State<'p, B: Backend> {
     function_ptr_cache: HashMap<Location<'p>, u64>,
 
     pub bv_symbols_map : HashMap<i32, String>,
+    pub recorded_operations: Vec<RecordedOperation>, // Target, Value
 }
 
 /// Describes a location in LLVM IR in a format more suitable for printing - for
@@ -489,6 +491,7 @@ where
             solver,
             config,
             bv_symbols_map: Default::default(),
+            recorded_operations: vec![],
         };
 
 
@@ -1563,9 +1566,12 @@ where
                 "[unknown]"
             }
         }).to_owned() + &*format!(" read({bits})").to_owned();
-        self.bv_symbols_map.insert(retval.get_id(), symbol.clone());
+        self.bv_symbols_map.insert(addr.get_id(), symbol.clone());
 
-        println!("READ\n\tTARGET = {symbol}");
+        let symbol_val = symbol.clone() + " readval()";
+        self.bv_symbols_map.insert(retval.get_id(), symbol_val.clone());
+
+        self.recorded_operations.push(RecordedOperation::Read(symbol, symbol_val));
         Ok(retval)
     }
 
