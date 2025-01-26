@@ -622,7 +622,7 @@ where
                     Type::IntegerType { .. } | Type::VectorType { .. } | Type::PointerType { .. } => {
                         let zero = self.state.zero(1);
                         let one = self.state.one(1);
-                        let final_bv = binary_on_vector(&bvfirstop, &bvsecondop, *num_elements as u32, |a,b| bvpred(a,b).cond_bv(&one, &zero))?;
+                        let final_bv = binary_on_vector(&bvfirstop, &bvsecondop, *num_elements as u32, |a, b| bvpred(a, b).cond_bv(&one, &zero))?;
                         self.state.record_bv_result(icmp, final_bv)
                     },
                     ty => Err(Error::MalformedInstruction(format!("Expected ICmp to have operands of type integer, pointer, or vector of integers, but got type {:?}", ty))),
@@ -856,13 +856,13 @@ where
 
         match &load.address {
             Operand::ConstantOperand(op_ref) => {
-            let op = op_ref.deref();
-                match op{
-                    Constant::GlobalReference { name,ty } => {
+                let op = op_ref.deref();
+                match op {
+                    Constant::GlobalReference { name, ty } => {
                         let sym = format!("global({name}, {ty})");
                         self.state.bv_symbols_map.insert(bvaddr.get_id(), sym);
                     }
-                    (_)=>{ }
+                    (_) => {}
                 }
             }
             (_) => {}
@@ -873,7 +873,7 @@ where
         let src_str = (match self.state.bv_symbols_map.get(&r.get_id()) {
             None => { "[unknown src at load]" },
             Some(s) => { s }
-        }).to_owned() ; // + " (" + &*load.address.to_string() + ") ";
+        }).to_owned(); // + " (" + &*load.address.to_string() + ") ";
 
         let dest_str = load.dest.to_string();
         let symbol = src_str + " deref(" + &*dest_str + ") " + " #" + &*r.get_id().to_string();
@@ -893,15 +893,15 @@ where
             None => { "" } //
             Some(s) => { s }
         });
-        let value_str_2 = match concrete{
-            None => {""}
+        let value_str_2 = match concrete {
+            None => { "" }
             Some(int) => &*{ int.to_string().clone() }
         };
         let value_str = value_str_1.to_owned() + value_str_2;
         let index_id = bvaddr.get_id();
         let index_symbol = match self.state.bv_symbols_map.get(&bvaddr.get_id()) {
-            None => {"[unknown]"}
-            Some(s) => {s}
+            None => { "[unknown]" }
+            Some(s) => { s }
         };
         self.state.recorded_operations.push(RecordedOperation::Write(index_symbol.to_string(), value_str));
         self.state.write(&bvaddr, bvval)
@@ -912,28 +912,27 @@ where
         let src_str = gep.address.to_string();
         let mut dest_str = gep.dest.to_string();
         dest_str += "(";
-        let indices:&Vec<Operand> = &gep.indices;
+        let indices: &Vec<Operand> = &gep.indices;
         dest_str += &*indices.iter().map(|i| {
-            match i{
+            match i {
                 Operand::ConstantOperand(o) => {
-                    let str = match o.deref(){
-                        Constant::Int {bits,value} => {value.to_string()}
-                        (_)=> { "?".to_string() }
+                    let str = match o.deref() {
+                        Constant::Int { bits, value } => { value.to_string() }
+                        (_) => { "?".to_string() }
                     };
                     str
                 }
                 // LocalOperand, when the array index is a variable
                 Operand::LocalOperand { .. } => {
                     let index_bv = self.state.operand_to_bv(&i).unwrap();
-                    match self.state.bv_symbols_map.get(&index_bv.get_id()){
+                    match self.state.bv_symbols_map.get(&index_bv.get_id()) {
                         None => {
                             "[unknown]"
                         }
-                        Some(s) => {s}
+                        Some(s) => { s }
                     }.to_string()
-
                 }
-                Operand::MetadataOperand => {"?".to_string()}
+                Operand::MetadataOperand => { "?".to_string() }
             }
         }).join(", ");
         dest_str += ")";
@@ -970,7 +969,7 @@ where
                 let result_symbol = (match self.state.bv_symbols_map.get(&bvbase.get_id()) {
                     None => { "[unkdown]" }
                     Some(x) => { x }
-                }).to_owned() + " -> " + &dest_str  + " #" + &*result.get_id().to_string();
+                }).to_owned() + " -> " + &dest_str + " #" + &*result.get_id().to_string();
                 self.state.bv_symbols_map.insert(result.get_id(), result_symbol);
 
                 let id = result.get_id();
@@ -991,7 +990,7 @@ where
     /// If `base_type` is a `NamedStructType`, the struct should be defined in the `state`'s current module.
     fn get_offset_recursive(
         state: &State<'p, B>,
-        mut indices: impl Iterator<Item = &'p Operand>,
+        mut indices: impl Iterator<Item=&'p Operand>,
         base_type: &Type,
         result_bits: u32,
     ) -> Result<B::BV> {
@@ -1071,7 +1070,7 @@ where
                         allocation_size_bits
                     };
                     let mut allocated = self.state.allocate(allocation_size_bits);
-                    let sym = format!("alloca({})",alloca.dest.to_string());
+                    let sym = format!("alloca({})", alloca.dest.to_string());
                     self.state.bv_symbols_map.insert(allocated.get_id(), sym);
                     self.state.record_bv_result(alloca, allocated)
                 },
@@ -1299,7 +1298,7 @@ where
     /// Returns the start offset (in bytes) of the indicated element, and the size (in bits) of the indicated element.
     fn get_offset_recursive_const_indices(
         &self,
-        mut indices: impl Iterator<Item = usize>,
+        mut indices: impl Iterator<Item=usize>,
         base_type: &Type,
     ) -> Result<(u32, u32)> {
         if let Type::NamedStructType { name } = base_type {
@@ -1423,7 +1422,9 @@ where
                     }
                     _ => {
                         // indirect function call ?
-                        panic!("non const operand function at call");
+                        println!("non const operand function at call");
+                        // panic!("non const operand function at call");
+                        function_name = "(indirect call site)".to_string();
                     }
                 }
             }
@@ -1435,34 +1436,58 @@ where
             .any(|e| matches!(e.0, Operand::MetadataOperand))
         {
             // println!("Call to '{function_name}' with Metadata Operand");
-             }
-else {
+        } else {
 
-    // println!("Call to '{function_name}':");
-    let mut i = 0;
-    let mut recorded_arguments:Vec<String> = vec![];
-    for arg in &call.arguments {
-        let operand: &Operand = &arg.0;
-        match operand {
-            Operand::MetadataOperand => {
-                panic!("unexpected metadata operand");
+            // println!("Call to '{function_name}':");
+            let mut i = 0;
+            let mut recorded_arguments: Vec<String> = vec![];
+            for arg in &call.arguments {
+                let operand: &Operand = &arg.0;
+                match operand {
+                    Operand::MetadataOperand => {
+                        panic!("unexpected metadata operand");
+                    }
+                    _ => {}
+                }
+                let bv = self.state.operand_to_bv(operand).unwrap();
+                let symbol = match self.state.bv_symbols_map.get(&bv.get_id()) {
+                    None => &"[unknown]".to_string(),
+                    Some(s) => s,
+                };
+                recorded_arguments.push(symbol.clone());
+                i += 1;
             }
-            _ => {}
+            self.state.recorded_operations.push(RecordedOperation::Call(function_name, recorded_arguments));
         }
-        let bv = self.state.operand_to_bv(operand).unwrap();
-        let symbol = match self.state.bv_symbols_map.get(&bv.get_id()) {
-            None => &"[unknown]".to_string(),
-            Some(s) => s,
-        };
-        recorded_arguments.push(symbol.clone());
-        i += 1;
-    }
-    self.state.recorded_operations.push(RecordedOperation::Call(function_name, recorded_arguments));
-}
-
 
 
         debug!("Symexing call {:?}", call);
+
+
+        match self.state.type_of(call).as_ref() {
+            Type::VoidType => {},
+            ty => {
+                let width = self.state.size_in_bits(&ty).ok_or_else(|| {
+                    Error::MalformedInstruction(
+                        "Call return type is an opaque struct type".into(),
+                    )
+                })?;
+                assert_ne!(width, 0, "Function return type has size 0 bits but isn't void type"); // void type was handled above
+                let bv = self.state.new_bv_with_name(
+                    Name::from(format!("{}_retval", "indirect_call")),
+                    width,
+                )?;
+                self.state
+                    .assign_bv_to_name(call.dest.as_ref().unwrap().clone(), bv)?;
+            },
+        };
+        Ok(None)
+
+        // I just fully disabled function call for my purposes.
+        // The original code is below.
+
+/*
+         debug!("Symexing call {:?}", call);
         match self.resolve_function(&call.function)? {
             ResolvedFunction::HookActive { hook, hooked_thing } => {
                 let pretty_hookedthing = hooked_thing.to_string();
@@ -1578,28 +1603,28 @@ else {
                     match self.state.pop_callsite() {
                         None => Ok(Some(returned_bv)), // if there was no callsite to pop, then we finished elsewhere. See notes on `symex_call()`
                         Some(ref callsite)
-                            if callsite.loc == saved_loc && callsite.instr.is_left() =>
-                        {
-                            self.state.cur_loc = saved_loc;
-                            self.state.cur_loc.inc(); // advance past the call instruction itself before recording the path entry. `saved_loc` must have been a call instruction, so can't be a terminator, so the call to `inc()` is safe.
-                            self.state.record_path_entry();
-                            match returned_bv {
-                                ReturnValue::Return(bv) => {
-                                    // can't quite use `state.record_bv_result(call, bv)?` because Call is not HasResult
-                                    self.state.assign_bv_to_name(
-                                        call.dest.as_ref().unwrap().clone(),
-                                        bv,
-                                    )?;
-                                },
-                                ReturnValue::ReturnVoid => assert_eq!(call.dest, None),
-                                ReturnValue::Throw(bvptr) => {
-                                    debug!("Callee threw an exception, but caller isn't inside a try block; rethrowing upwards");
-                                    return Ok(Some(ReturnValue::Throw(bvptr)));
-                                },
-                                ReturnValue::Abort => return Ok(Some(ReturnValue::Abort)),
-                            };
-                            debug!("Completed ordinary return to caller");
-                            info!(
+                        if callsite.loc == saved_loc && callsite.instr.is_left() =>
+                            {
+                                self.state.cur_loc = saved_loc;
+                                self.state.cur_loc.inc(); // advance past the call instruction itself before recording the path entry. `saved_loc` must have been a call instruction, so can't be a terminator, so the call to `inc()` is safe.
+                                self.state.record_path_entry();
+                                match returned_bv {
+                                    ReturnValue::Return(bv) => {
+                                        // can't quite use `state.record_bv_result(call, bv)?` because Call is not HasResult
+                                        self.state.assign_bv_to_name(
+                                            call.dest.as_ref().unwrap().clone(),
+                                            bv,
+                                        )?;
+                                    },
+                                    ReturnValue::ReturnVoid => assert_eq!(call.dest, None),
+                                    ReturnValue::Throw(bvptr) => {
+                                        debug!("Callee threw an exception, but caller isn't inside a try block; rethrowing upwards");
+                                        return Ok(Some(ReturnValue::Throw(bvptr)));
+                                    },
+                                    ReturnValue::Abort => return Ok(Some(ReturnValue::Abort)),
+                                };
+                                debug!("Completed ordinary return to caller");
+                                info!(
                                 "Leaving function {:?}, continuing in caller {:?} (bb {}){}",
                                 called_funcname,
                                 self.state.cur_loc.func.name,
@@ -1610,8 +1635,8 @@ else {
                                     String::new()
                                 },
                             );
-                            Ok(None)
-                        }
+                                Ok(None)
+                            }
                         Some(callsite) => panic!("Received unexpected callsite {:?}", callsite),
                     }
                 } else {
@@ -1648,6 +1673,7 @@ else {
                 }
             },
         }
+         */
     }
 
     #[allow(clippy::if_same_then_else)] // in this case, having some identical `if` blocks actually improves readability, I think
