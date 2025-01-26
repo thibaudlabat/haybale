@@ -26,7 +26,7 @@ use crate::error::*;
 use crate::function_hooks::{self, FunctionHooks};
 use crate::global_allocations::*;
 use crate::hooks;
-use crate::masterthesis::RecordedOperation;
+use crate::masterthesis::{BvSymbolsMap, RecordedOperation};
 use crate::project::Project;
 use crate::solver_utils::{self, PossibleSolutions};
 use crate::varmap::{RestoreInfo, VarMap};
@@ -379,6 +379,9 @@ struct BacktrackPoint<'p, B: Backend> {
     /// If we ever revert to this `BacktrackPoint`, we will truncate the `path` to
     /// its first `path_len` entries.
     path_len: usize,
+
+    bv_symbols_map : BvSymbolsMap,
+    recorded_operations: Vec<RecordedOperation>
 }
 
 impl<'p, B: Backend> fmt::Display for BacktrackPoint<'p, B> {
@@ -1957,6 +1960,8 @@ where
             varmap: self.varmap.clone(),
             mem: self.mem.borrow().clone(),
             path_len: self.path.len(),
+            bv_symbols_map: self.bv_symbols_map.clone(),
+            recorded_operations: self.recorded_operations.clone()
         });
     }
 
@@ -1972,6 +1977,8 @@ where
             self.path.truncate(bp.path_len);
             self.cur_loc = bp.loc;
             bp.constraint.assert()?;
+            self.bv_symbols_map = bp.bv_symbols_map.clone();
+            self.recorded_operations = bp.recorded_operations.clone();
             Ok(true)
         } else {
             Ok(false)
