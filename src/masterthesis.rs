@@ -9,7 +9,10 @@ pub type BvSymbolsMap = HashMap<BVId, RecordedValue>;
 pub enum RecordedValue {
     String(String),
     Unknown(String),
-    Apply(Box<RecordedValue>, String)
+    Apply(Box<RecordedValue>, String),
+    Constant(String),
+    Global(String),
+    Deref(Box<RecordedValue>)
 }
 
 #[derive(Clone)]
@@ -23,10 +26,13 @@ pub enum RecordedOperation {
 impl fmt::Display for RecordedValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RecordedValue::String(s) => write!(f, "{}", s),
-            RecordedValue::Unknown(s) => write!(f, "[unknown: {}]", s),
+            RecordedValue::String(s) => write!(f, "{s}"),
+            RecordedValue::Unknown(s) => write!(f, "[unknown: {s}]"),
             RecordedValue::Apply(left, right) =>
-                write!(f, "{} {}", left, right),
+                write!(f, "{left} {right}"),
+            RecordedValue::Constant(value) => {write!(f, "[constant: {value}]")},
+            RecordedValue::Global(value) => {write!(f, "[global: {value}]")},
+            RecordedValue::Deref(value) => {write!(f, "{value} deref()")}
         }
         }
     }

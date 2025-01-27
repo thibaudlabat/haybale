@@ -1563,26 +1563,21 @@ where
             );
         }
 
-        let symbol = (match self.bv_symbols_map.get(&addr.get_id()){
-            Some(s) => s.to_string(),
+
+        let symbol = match self.bv_symbols_map.get(&addr.get_id()) {
+            Some(s) => {s.clone()}
             None => {
-                "[unknown]".to_string()
+                let x = RecordedValue::Unknown("read addr".to_string());
+                self.bv_symbols_map.insert(addr.get_id(), x.clone());
+                x
             }
-        }).to_owned() + &*format!(" read({bits})").to_owned() + " #"+ &*addr.get_id().to_string();
+        };
 
-        match self.bv_symbols_map.get(&addr.get_id()) {
-            Some(s) => {}
-            None => {
-                let symbol = RecordedValue::Unknown("read addr".to_string());
-                self.bv_symbols_map.insert(addr.get_id(), symbol);
-            }
-        }
+        let symbol_val = RecordedValue::Apply(Box::new(symbol.clone()), "readval()".to_string());
+        self.bv_symbols_map.insert(retval.get_id(),symbol_val.clone());
 
-        let symbol_val = symbol.clone() + " readval() #"+ &*retval.get_id().to_string();
-        self.bv_symbols_map.insert(retval.get_id(), RecordedValue::String(symbol_val.clone()));
-
-        self.recorded_operations.push(RecordedOperation::Read(RecordedValue::String(symbol),
-                                                              RecordedValue::String(symbol_val)));
+        self.recorded_operations.push(RecordedOperation::Read(symbol,
+                                                              symbol_val));
         Ok(retval)
     }
 

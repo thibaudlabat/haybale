@@ -4,14 +4,14 @@ use llvm_ir::instruction::{BinaryOp, InlineAssembly};
 use llvm_ir::types::NamedStructDef;
 use llvm_ir::*;
 use log::{debug, info};
-use std::convert::TryInto;
-use std::fmt;
-use std::ops::Deref;
 // Rust 1.51.0 introduced its own `.reduce()` on the main `Iterator` trait.
 // So, starting with 1.51.0, we don't need `reduce::Reduce`, and in fact it
 // causes a conflict.
 #[rustversion::before(1.51)]
 use reduce::Reduce;
+use std::convert::TryInto;
+use std::fmt;
+use std::ops::Deref;
 
 use crate::backend::*;
 use crate::config::*;
@@ -717,11 +717,15 @@ where
                     })?;
 
                 let mut result = bvop.sext(dest_size - source_size);
-                let symbol = (match self.state.bv_symbols_map.get(&bvop.get_id()) {
-                    None => { "[unknown]".to_string() }
-                    Some(s) => { s.to_string() }
-                }).to_owned() + " (sext)" + " #" + &*result.get_id().to_string();
-                self.state.bv_symbols_map.insert(result.get_id(), RecordedValue::String(symbol));
+
+                let symbol = match self.state.bv_symbols_map.get(&bvop.get_id()) {
+                    None => { RecordedValue::Unknown("sext".to_string()) }
+                    Some(s) => { s.clone() }
+                };
+                let symbol_with_sext = RecordedValue::Apply(Box::new(symbol), "sext".to_string());
+
+                self.state.bv_symbols_map.insert(result.get_id(), symbol_with_sext);
+
                 self.state.record_bv_result(sext, result)
             },
             #[cfg(feature = "llvm-11-or-greater")]
@@ -859,8 +863,8 @@ where
                 let op = op_ref.deref();
                 match op {
                     Constant::GlobalReference { name, ty } => {
-                        let sym = format!("global({name}, {ty})");
-                        self.state.bv_symbols_map.insert(bvaddr.get_id(), RecordedValue::String(sym));
+                        let sym = RecordedValue::Global(op_ref.to_string());
+                        self.state.bv_symbols_map.insert(bvaddr.get_id(), sym);
                     }
                     (_) => {}
                 }
@@ -870,14 +874,13 @@ where
 
         let mut r = self.state.read(&bvaddr, dest_size)?;
 
-        let src_str = (match self.state.bv_symbols_map.get(&r.get_id()) {
-            None => { "[unknown src at load]".to_string() },
-            Some(s) => { s.to_string() }
-        }).to_owned(); // + " (" + &*load.address.to_string() + ") ";
+        let r_symbol = (match self.state.bv_symbols_map.get(&r.get_id()) {
+            None => { RecordedValue::Unknown("read value".to_string()) },
+            Some(s) => { s.clone() }
+        });
+        let r_symbol_deref = RecordedValue::Deref(Box::new(r_symbol));
 
-        let dest_str = load.dest.to_string();
-        let symbol = src_str + " deref(" + &*dest_str + ") " + " #" + &*r.get_id().to_string();
-        self.state.bv_symbols_map.insert(r.get_id(), RecordedValue::String(symbol));
+        self.state.bv_symbols_map.insert(r.get_id(), r_symbol_deref);
         self.state
             .record_bv_result(load, r)
     }
@@ -898,14 +901,13 @@ where
             Some(int) => &*{ int.to_string().clone() }
         };
         let value_str = value_str_1.to_owned() + value_str_2;
-        let index_id = bvaddr.get_id();
         let index_symbol = match self.state.bv_symbols_map.get(&bvaddr.get_id()) {
-            None => { &RecordedValue::Unknown("symex_store index".to_string()) }
-            Some(s) => {s}
+            None => { RecordedValue::Unknown("symex_store index".to_string()) }
+            Some(s) => {s.clone()}
         };
 
         self.state.recorded_operations.push(RecordedOperation::Write(
-            index_symbol.clone(),
+            index_symbol,
             RecordedValue::String(value_str)));
         self.state.write(&bvaddr, bvval)
     }
@@ -1411,7 +1413,7 @@ where
     ///
     /// If the returned value is `Ok(None)`, then we finished the call normally, and execution should continue from here.
     fn symex_call(&mut self, call: &'p instruction::Call) -> Result<Option<ReturnValue<B::BV>>> {
-        let function_name; // = "[unknown]".to_string();
+        let function_name;
         match &call.function {
             Either::Left(_inline_asm) => {
                 panic!("inline assembly");
@@ -1421,13 +1423,20 @@ where
                     Operand::ConstantOperand(const_op) => {
                         let x = const_op.deref();
                         let str = x.to_string();
-                        function_name = str;
-                    }
-                    _ => {
-                        // indirect function call ?
-                        println!("non const operand function at call");
+                        function_name = RecordedValue::String(str);
+                    },
+
+                    Operand::LocalOperand { .. } => {
+                        let bv_function = self.state.operand_to_bv(operand).unwrap();
                         // panic!("non const operand function at call");
-                        function_name = "(indirect call site)".to_string();
+                        function_name = match self.state.bv_symbols_map.get(&bv_function.get_id()) {
+                            None => { RecordedValue::Unknown("indirect call site".to_string()) }
+                            Some(s) => { s.clone() }
+                        };
+                    },
+                    Operand::MetadataOperand => {
+                        // TODO?
+                        function_name = RecordedValue::String("(metadata function)".to_string());
                     }
                 }
             }
@@ -1446,22 +1455,29 @@ where
             let mut recorded_arguments: Vec<RecordedValue> = vec![];
             for arg in &call.arguments {
                 let operand: &Operand = &arg.0;
+                let symbol;
                 match operand {
                     Operand::MetadataOperand => {
                         panic!("unexpected metadata operand");
                     }
-                    _ => {}
+
+                    Operand::LocalOperand { .. } => {
+                        let bv = self.state.operand_to_bv(operand).unwrap();
+                        symbol = match self.state.bv_symbols_map.get(&bv.get_id()) {
+                            None => RecordedValue::Unknown(format!("{function_name} call_arg({i})")),
+                            Some(s) => s.clone(),
+                        };
+                    }
+                    Operand::ConstantOperand(const_op) => {
+                        symbol = RecordedValue::Constant(const_op.to_string());
+                    }
                 }
-                let bv = self.state.operand_to_bv(operand).unwrap();
-                let symbol = match self.state.bv_symbols_map.get(&bv.get_id()) {
-                    None => &"[unknown]".to_string(),
-                    Some(s) => &*s.to_string(),
-                };
-                recorded_arguments.push(RecordedValue::String(symbol.to_string()));
+
+                recorded_arguments.push(symbol.clone());
                 i += 1;
             }
             self.state.recorded_operations.push(RecordedOperation::Call(
-                RecordedValue::String(function_name),
+                function_name,
                 recorded_arguments));
         }
 
