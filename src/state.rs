@@ -26,7 +26,7 @@ use crate::error::*;
 use crate::function_hooks::{self, FunctionHooks};
 use crate::global_allocations::*;
 use crate::hooks;
-use crate::masterthesis::{BvSymbolsMap, RecordedOperation};
+use crate::masterthesis::{BvSymbolsMap, RecordedOperation, RecordedValue};
 use crate::project::Project;
 use crate::solver_utils::{self, PossibleSolutions};
 use crate::varmap::{RestoreInfo, VarMap};
@@ -95,7 +95,7 @@ pub struct State<'p, B: Backend> {
     /// multiple paths.
     function_ptr_cache: HashMap<Location<'p>, u64>,
 
-    pub bv_symbols_map : HashMap<i32, String>,
+    pub bv_symbols_map : BvSymbolsMap,
     pub recorded_operations: Vec<RecordedOperation>, // Target, Value
 }
 
@@ -1564,17 +1564,18 @@ where
         }
 
         let symbol = (match self.bv_symbols_map.get(&addr.get_id()){
-            Some(s) => s,
+            Some(s) => s.to_string(),
             None => {
-                "[unknown]"
+                "[unknown]".to_string()
             }
         }).to_owned() + &*format!(" read({bits})").to_owned() + " #"+ &*addr.get_id().to_string();
-        self.bv_symbols_map.insert(addr.get_id(), symbol.clone());
+        self.bv_symbols_map.insert(addr.get_id(), RecordedValue::String(symbol.clone()));
 
         let symbol_val = symbol.clone() + " readval() #"+ &*retval.get_id().to_string();
-        self.bv_symbols_map.insert(retval.get_id(), symbol_val.clone());
+        self.bv_symbols_map.insert(retval.get_id(), RecordedValue::String(symbol_val.clone()));
 
-        self.recorded_operations.push(RecordedOperation::Read(symbol, symbol_val));
+        self.recorded_operations.push(RecordedOperation::Read(RecordedValue::String(symbol),
+                                                              RecordedValue::String(symbol_val)));
         Ok(retval)
     }
 

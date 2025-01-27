@@ -1,11 +1,51 @@
 use std::collections::HashMap;
+use std::fmt;
 
 pub type BVId = i32;
-pub type BvSymbolsMap = HashMap<BVId, String>;
+pub type BvSymbolsMap = HashMap<BVId, RecordedValue>;
+
+
+#[derive(Clone)]
+pub enum RecordedValue {
+    String(String),
+}
 
 #[derive(Clone)]
 pub enum RecordedOperation {
-    Read(String, String), // Target, Value
-    Write(String, String), // Target, Value
-    Call(String, Vec<String>), // Function name, Vec<Arguments as Strings>
+    Read(RecordedValue, RecordedValue), // Target, Value
+    Write(RecordedValue, RecordedValue), // Target, Value
+    Call(RecordedValue, Vec<RecordedValue>), // Function name, Vec<Arguments as Strings>
+    Apply(RecordedValue, String),
+}
+
+// Implement Display for RecordedOperationValue
+impl fmt::Display for RecordedValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RecordedValue::String(s) => write!(f, "{}", s),
+        }
+    }
+}
+
+// Implement Display for RecordedOperation
+impl fmt::Display for RecordedOperation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RecordedOperation::Read(target, value) =>
+                write!(f, "READ:\n\tTARGET = {}\n\tVALUE = {}", target, value),
+            RecordedOperation::Write(target, value) =>
+                write!(f, "WRITE:\n\tTARGET = {}\n\tVALUE = {}", target, value),
+            RecordedOperation::Call(func_name, args) => {
+                // Convert args to strings and join them
+                write!(f,"CALL:\n\tFUNCTION = {}\n", func_name);
+                for i in 0..args.len() {
+                    let arg = &args[i];
+                    write!(f,"\targ[{}] = {}", i, arg);
+                }
+                Ok(())
+            },
+            RecordedOperation::Apply(left, right) =>
+                write!(f, "{} {}", left, right),
+        }
+    }
 }

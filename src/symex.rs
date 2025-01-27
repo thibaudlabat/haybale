@@ -17,7 +17,7 @@ use crate::backend::*;
 use crate::config::*;
 use crate::error::*;
 use crate::function_hooks::*;
-use crate::masterthesis::RecordedOperation;
+use crate::masterthesis::{RecordedOperation, RecordedValue};
 use crate::parameter_val::ParameterVal;
 use crate::project::Project;
 use crate::return_value::*;
@@ -718,10 +718,10 @@ where
 
                 let mut result = bvop.sext(dest_size - source_size);
                 let symbol = (match self.state.bv_symbols_map.get(&bvop.get_id()) {
-                    None => { "[unknown]" }
-                    Some(s) => { s }
+                    None => { "[unknown]".to_string() }
+                    Some(s) => { s.to_string() }
                 }).to_owned() + " (sext)" + " #" + &*result.get_id().to_string();
-                self.state.bv_symbols_map.insert(result.get_id(), symbol);
+                self.state.bv_symbols_map.insert(result.get_id(), RecordedValue::String(symbol));
                 self.state.record_bv_result(sext, result)
             },
             #[cfg(feature = "llvm-11-or-greater")]
@@ -860,7 +860,7 @@ where
                 match op {
                     Constant::GlobalReference { name, ty } => {
                         let sym = format!("global({name}, {ty})");
-                        self.state.bv_symbols_map.insert(bvaddr.get_id(), sym);
+                        self.state.bv_symbols_map.insert(bvaddr.get_id(), RecordedValue::String(sym));
                     }
                     (_) => {}
                 }
@@ -871,13 +871,13 @@ where
         let mut r = self.state.read(&bvaddr, dest_size)?;
 
         let src_str = (match self.state.bv_symbols_map.get(&r.get_id()) {
-            None => { "[unknown src at load]" },
-            Some(s) => { s }
+            None => { "[unknown src at load]".to_string() },
+            Some(s) => { s.to_string() }
         }).to_owned(); // + " (" + &*load.address.to_string() + ") ";
 
         let dest_str = load.dest.to_string();
         let symbol = src_str + " deref(" + &*dest_str + ") " + " #" + &*r.get_id().to_string();
-        self.state.bv_symbols_map.insert(r.get_id(), symbol);
+        self.state.bv_symbols_map.insert(r.get_id(), RecordedValue::String(symbol));
         self.state
             .record_bv_result(load, r)
     }
@@ -891,7 +891,7 @@ where
         let concrete = bvval.as_u64();
         let value_str_1 = (match self.state.bv_symbols_map.get(&bvval.get_id()) {
             None => { "" } //
-            Some(s) => { s }
+            Some(s) => &*{ s.to_string() }
         });
         let value_str_2 = match concrete {
             None => { "" }
@@ -901,9 +901,12 @@ where
         let index_id = bvaddr.get_id();
         let index_symbol = match self.state.bv_symbols_map.get(&bvaddr.get_id()) {
             None => { "[unknown]" }
-            Some(s) => { s }
+            Some(s) => &*{ s.to_string() }
         };
-        self.state.recorded_operations.push(RecordedOperation::Write(index_symbol.to_string(), value_str));
+
+        self.state.recorded_operations.push(RecordedOperation::Write(
+            RecordedValue::String(index_symbol.to_string()),
+            RecordedValue::String(value_str)));
         self.state.write(&bvaddr, bvval)
     }
 
@@ -927,9 +930,9 @@ where
                     let index_bv = self.state.operand_to_bv(&i).unwrap();
                     match self.state.bv_symbols_map.get(&index_bv.get_id()) {
                         None => {
-                            "[unknown]"
+                            "[unknown]".to_string()
                         }
-                        Some(s) => { s }
+                        Some(s) => { s.to_string() }
                     }.to_string()
                 }
                 Operand::MetadataOperand => { "?".to_string() }
@@ -947,15 +950,15 @@ where
                 let bvbase_symbol = (match bvbase.get_symbol() {
                     None => {
                         match self.state.bv_symbols_map.get(&bvbase.get_id()) {
-                            None => { "[unknown at gep]" }
-                            Some(s) => { s }
+                            None => { "[unknown at gep]".to_string() }
+                            Some(s) => { s.to_string() }
                         }
                     }
-                    Some(s) => { s }
+                    Some(s) => { s.to_string() }
                 }).to_owned(); //+ " (" + &*gep.address.to_string() + ") ";
 
                 let symbol = bvbase_symbol + " #" + &*bvbase.get_id().to_string();
-                self.state.bv_symbols_map.insert(bvbase.get_id(), symbol);
+                self.state.bv_symbols_map.insert(bvbase.get_id(), RecordedValue::String(symbol));
 
                 let offset = Self::get_offset_recursive(
                     &self.state,
@@ -967,10 +970,10 @@ where
 
                 let mut result = bvbase.add(&offset);
                 let result_symbol = (match self.state.bv_symbols_map.get(&bvbase.get_id()) {
-                    None => { "[unkdown]" }
-                    Some(x) => { x }
+                    None => { "[unkdown]".to_string() }
+                    Some(x) => { x.to_string() }
                 }).to_owned() + " -> " + &dest_str + " #" + &*result.get_id().to_string();
-                self.state.bv_symbols_map.insert(result.get_id(), result_symbol);
+                self.state.bv_symbols_map.insert(result.get_id(), RecordedValue::String(result_symbol));
 
                 let id = result.get_id();
                 self.state.record_bv_result(gep, result)
@@ -1071,7 +1074,7 @@ where
                     };
                     let mut allocated = self.state.allocate(allocation_size_bits);
                     let sym = format!("alloca({})", alloca.dest.to_string());
-                    self.state.bv_symbols_map.insert(allocated.get_id(), sym);
+                    self.state.bv_symbols_map.insert(allocated.get_id(), RecordedValue::String(sym));
                     self.state.record_bv_result(alloca, allocated)
                 },
                 c => Err(Error::UnsupportedInstruction(format!(
@@ -1440,7 +1443,7 @@ where
 
             // println!("Call to '{function_name}':");
             let mut i = 0;
-            let mut recorded_arguments: Vec<String> = vec![];
+            let mut recorded_arguments: Vec<RecordedValue> = vec![];
             for arg in &call.arguments {
                 let operand: &Operand = &arg.0;
                 match operand {
@@ -1452,12 +1455,14 @@ where
                 let bv = self.state.operand_to_bv(operand).unwrap();
                 let symbol = match self.state.bv_symbols_map.get(&bv.get_id()) {
                     None => &"[unknown]".to_string(),
-                    Some(s) => s,
+                    Some(s) => &*s.to_string(),
                 };
-                recorded_arguments.push(symbol.clone());
+                recorded_arguments.push(RecordedValue::String(symbol.to_string()));
                 i += 1;
             }
-            self.state.recorded_operations.push(RecordedOperation::Call(function_name, recorded_arguments));
+            self.state.recorded_operations.push(RecordedOperation::Call(
+                RecordedValue::String(function_name),
+                recorded_arguments));
         }
 
 
