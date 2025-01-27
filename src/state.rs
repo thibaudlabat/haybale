@@ -1569,7 +1569,14 @@ where
                 "[unknown]".to_string()
             }
         }).to_owned() + &*format!(" read({bits})").to_owned() + " #"+ &*addr.get_id().to_string();
-        self.bv_symbols_map.insert(addr.get_id(), RecordedValue::String(symbol.clone()));
+
+        match self.bv_symbols_map.get(&addr.get_id()) {
+            Some(s) => {}
+            None => {
+                let symbol = RecordedValue::Unknown("read addr".to_string());
+                self.bv_symbols_map.insert(addr.get_id(), symbol);
+            }
+        }
 
         let symbol_val = symbol.clone() + " readval() #"+ &*retval.get_id().to_string();
         self.bv_symbols_map.insert(retval.get_id(), RecordedValue::String(symbol_val.clone()));

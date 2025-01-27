@@ -900,12 +900,12 @@ where
         let value_str = value_str_1.to_owned() + value_str_2;
         let index_id = bvaddr.get_id();
         let index_symbol = match self.state.bv_symbols_map.get(&bvaddr.get_id()) {
-            None => { "[unknown]" }
-            Some(s) => &*{ s.to_string() }
+            None => { &RecordedValue::Unknown("symex_store index".to_string()) }
+            Some(s) => {s}
         };
 
         self.state.recorded_operations.push(RecordedOperation::Write(
-            RecordedValue::String(index_symbol.to_string()),
+            index_symbol.clone(),
             RecordedValue::String(value_str)));
         self.state.write(&bvaddr, bvval)
     }
