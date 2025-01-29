@@ -17,7 +17,7 @@ use crate::backend::*;
 use crate::config::*;
 use crate::error::*;
 use crate::function_hooks::*;
-use crate::masterthesis::{RecordedOperation, RecordedValue};
+use crate::masterthesis::{get_bv_symbol_or_unknown, RecordedOperation, RecordedValue};
 use crate::parameter_val::ParameterVal;
 use crate::project::Project;
 use crate::return_value::*;
@@ -65,6 +65,7 @@ pub fn symex_function<'p, B: Backend>(
             .take(func.parameters.len())
             .collect()
     });
+    let mut i_param = 0;
     let bvparams: Vec<_> = func
         .parameters
         .iter()
@@ -77,6 +78,11 @@ pub fn symex_function<'p, B: Backend>(
             let bvparam = state
                 .new_bv_with_name(param.name.clone(), param_size)
                 .unwrap();
+
+            let bvparam_symbol = RecordedValue::BaseArgument(i_param,param.name.to_string(),param.ty.to_string());
+            state.bv_symbols_map.insert(bvparam.get_id(), bvparam_symbol);
+            i_param +=1;
+
             match paramval {
                 ParameterVal::Unconstrained => {}, // nothing to do
                 ParameterVal::ExactValue(val) => {
@@ -945,23 +951,6 @@ where
             Type::PointerType { .. } => {
                 let mut bvbase = self.state.operand_to_bv(&gep.address)?;
 
-                // do symbols need to be unique..?
-                // I actually just need annotations
-                // could be stored anywhere else, in a map...
-                // This symbol comes from Haybale! do not replace with bv_symbols_map access
-                let bvbase_symbol = (match bvbase.get_symbol() {
-                    None => {
-                        match self.state.bv_symbols_map.get(&bvbase.get_id()) {
-                            None => { "[unknown at gep]".to_string() }
-                            Some(s) => { s.to_string() }
-                        }
-                    }
-                    Some(s) => { s.to_string() }
-                }).to_owned(); //+ " (" + &*gep.address.to_string() + ") ";
-
-                let symbol = bvbase_symbol + " #" + &*bvbase.get_id().to_string();
-                self.state.bv_symbols_map.insert(bvbase.get_id(), RecordedValue::String(symbol));
-
                 let offset = Self::get_offset_recursive(
                     &self.state,
                     gep.indices.iter(),
@@ -970,14 +959,39 @@ where
                 )?;
 
 
-                let mut result = bvbase.add(&offset);
-                let result_symbol = (match self.state.bv_symbols_map.get(&bvbase.get_id()) {
-                    None => { "[unkdown]".to_string() }
-                    Some(x) => { x.to_string() }
-                }).to_owned() + " -> " + &dest_str + " #" + &*result.get_id().to_string();
-                self.state.bv_symbols_map.insert(result.get_id(), RecordedValue::String(result_symbol));
+            let indices_symbols:Vec<Box<RecordedValue>> = gep.indices.iter().map(|x|{
+                match(x){
+                    Operand::LocalOperand { .. } => {
 
-                let id = result.get_id();
+                        match self.state.bv_symbols_map.get(&offset.get_id()) {
+                            None => { RecordedValue::Unknown("symex_gep offset".to_string()) }
+                            Some(x) => { x.clone() }
+                        }
+
+                    }
+                    Operand::ConstantOperand(const_op) => {
+                        RecordedValue::Constant(const_op.to_string())
+                    }
+                    Operand::MetadataOperand => {
+                        RecordedValue::Unknown("symex_gep metadata_operand".to_string())
+                    }
+                }
+            })
+                .map(|x|{Box::new(x)})
+                .collect();
+
+
+                let mut result = bvbase.add(&offset);
+                let result_symbol = get_bv_symbol_or_unknown(&self.state, &bvbase,"symex_gep base");
+
+                let result_with_offset = RecordedValue::FieldAccess(
+                    Box::new(result_symbol),
+                    gep.to_string(),
+                    dest_str,
+                    indices_symbols);
+
+                self.state.bv_symbols_map.insert(result.get_id(), result_with_offset);
+
                 self.state.record_bv_result(gep, result)
             },
             Type::VectorType { .. } => Err(Error::UnsupportedInstruction(
