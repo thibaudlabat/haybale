@@ -97,6 +97,7 @@ pub struct State<'p, B: Backend> {
 
     pub bv_symbols_map : BvSymbolsMap,
     pub recorded_operations: Vec<RecordedOperation>, // Target, Value
+    pub instrCount: u32
 }
 
 /// Describes a location in LLVM IR in a format more suitable for printing - for
@@ -381,7 +382,8 @@ struct BacktrackPoint<'p, B: Backend> {
     path_len: usize,
 
     bv_symbols_map : BvSymbolsMap,
-    recorded_operations: Vec<RecordedOperation>
+    recorded_operations: Vec<RecordedOperation>,
+    instrCount: u32
 }
 
 impl<'p, B: Backend> fmt::Display for BacktrackPoint<'p, B> {
@@ -495,6 +497,7 @@ where
             config,
             bv_symbols_map: Default::default(),
             recorded_operations: vec![],
+            instrCount: 0
         };
 
 
@@ -1964,7 +1967,8 @@ where
             mem: self.mem.borrow().clone(),
             path_len: self.path.len(),
             bv_symbols_map: self.bv_symbols_map.clone(),
-            recorded_operations: self.recorded_operations.clone()
+            recorded_operations: self.recorded_operations.clone(),
+            instrCount: self.instrCount
         });
     }
 
@@ -1982,6 +1986,7 @@ where
             bp.constraint.assert()?;
             self.bv_symbols_map = bp.bv_symbols_map.clone();
             self.recorded_operations = bp.recorded_operations.clone();
+            self.instrCount = bp.instrCount;
             Ok(true)
         } else {
             Ok(false)

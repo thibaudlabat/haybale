@@ -275,6 +275,8 @@ where
             for callback in &self.state.config.callbacks.instruction_callbacks {
                 callback(inst, &self.state)?;
             }
+
+            self.state.instrCount += 1;
             let result = if let Ok(binop) = inst.clone().try_into() {
                 self.symex_binop(&binop)
             } else {
