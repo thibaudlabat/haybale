@@ -4,6 +4,7 @@ use itertools::Itertools;
 use std::collections::HashMap;
 use std::fmt;
 use std::ops::Deref;
+use llvm_ir::instruction::groups::BinaryOp;
 use llvm_ir::Operand;
 
 pub type BVId = i32;
@@ -22,6 +23,7 @@ pub enum RecordedValue {
     BaseArgument(i32, String, String), // parameter ID, name, type
     FunctionReturnValue(Box<RecordedValue>), // Called function (value is not stored)
     FunctionReturnTarget(Box<RecordedValue>), // Called function (value is not stored)
+    BinaryOperation(Box<RecordedValue>, Box<RecordedValue>, String),
 }
 
 #[derive(Clone)]
@@ -58,6 +60,9 @@ impl fmt::Display for RecordedValue {
             RecordedValue::FunctionReturnTarget(func_name) => {
                 write!(f, "func_retdest({func_name})")
             }
+            RecordedValue::BinaryOperation(a, b, binop) => {
+                write!(f, "binop({}, {}, {:?})", a, b, binop)
+            }
         }
         }
     }
@@ -81,7 +86,7 @@ impl fmt::Display for RecordedOperation {
                 Ok(())
             }
             RecordedOperation::Compare(a, b, predicate) => {
-               // write!(f, "COMPARE:\n\tA = {}\n\tB = {}\n\tPREDICATE = {}", a, b, predicate)
+                write!(f, "COMPARE:\n\tA = {}\n\tB = {}\n\tPREDICATE = {}", a, b, predicate)
             }
         }
     }
@@ -129,6 +134,9 @@ pub fn hasNoUnknownOrFunc(val: &RecordedValue) -> bool {
         RecordedValue::BaseArgument(_, _, _) => {true}
         RecordedValue::FunctionReturnValue(_) => {false}
         RecordedValue::FunctionReturnTarget(_) => {false}
+        RecordedValue::BinaryOperation(a, b, _) => {
+            hasNoUnknownOrFunc(a) && hasNoUnknownOrFunc(b)
+        }
     }
 }
 
@@ -147,6 +155,31 @@ pub fn comesFromBaseArgument(val: &RecordedValue) -> bool {
         RecordedValue::BaseArgument(_, _, _) => {true}
         RecordedValue::FunctionReturnValue(_) => {false}
         RecordedValue::FunctionReturnTarget(_) => {false}
+        RecordedValue::BinaryOperation(a, b, _) => {
+            comesFromBaseArgument(a) || comesFromBaseArgument(b)
+        }
     }
 }
 
+pub fn binaryOpToString(bop: &BinaryOp) -> String{
+    match bop{
+        BinaryOp::Add(_) => {"Add"}
+        BinaryOp::Sub(_) => {"Sub"}
+        BinaryOp::Mul(_) => {"Mul"}
+        BinaryOp::UDiv(_) => {"UDiv"}
+        BinaryOp::SDiv(_) => {"SDiv"}
+        BinaryOp::URem(_) => {"URem"}
+        BinaryOp::SRem(_) => {"SRem"}
+        BinaryOp::And(_) => {"And"}
+        BinaryOp::Or(_) => {"Or"}
+        BinaryOp::Xor(_) => {"Xor"}
+        BinaryOp::Shl(_) => {"Shl"}
+        BinaryOp::LShr(_) => {"LShr"}
+        BinaryOp::AShr(_) => {"AShr"}
+        BinaryOp::FAdd(_) => {"FAdd"}
+        BinaryOp::FSub(_) => {"FSub"}
+        BinaryOp::FMul(_) => {"FMul"}
+        BinaryOp::FDiv(_) => {"FDiv"}
+        BinaryOp::FRem(_) => {"FRem"}
+    }.to_string()
+}

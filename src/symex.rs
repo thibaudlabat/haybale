@@ -14,6 +14,7 @@ use std::fmt;
 use std::ops::Deref;
 
 use crate::backend::*;
+use crate::binaryOpToString;
 use crate::config::*;
 use crate::error::*;
 use crate::function_hooks::*;
@@ -579,9 +580,21 @@ where
         let bvop0 = self.state.operand_to_bv(op0)?;
         let bvop1 = self.state.operand_to_bv(op1)?;
         let bvoperation = Self::binop_to_bvbinop(bop)?;
+
+
+        let op0_sym = get_operand_symbol_or_unknown(&self.state, &op0, "symex_binop op0");
+        let op1_sym = get_operand_symbol_or_unknown(&self.state, &op1, "symex_binop op1");
+
+
         match op_type.as_ref() {
             Type::IntegerType { .. } => {
-                self.state.record_bv_result(bop, bvoperation(&bvop0, &bvop1))
+                let result = bvoperation(&bvop0, &bvop1);
+                self.state.bv_symbols_map.insert(result.get_id(),
+                                                 RecordedValue::BinaryOperation(
+                                                     Box::new(op0_sym),
+                                                     Box::new(op1_sym),
+                                                     binaryOpToString(&bop)));
+                self.state.record_bv_result(bop, result)
             },
             #[cfg(feature = "llvm-11-or-greater")]
             Type::VectorType { scalable: true, .. } => {
@@ -590,7 +603,13 @@ where
             Type::VectorType { element_type, num_elements, .. } => {
                 match element_type.as_ref() {
                     Type::IntegerType { .. } => {
-                        self.state.record_bv_result(bop, binary_on_vector(&bvop0, &bvop1, *num_elements as u32, bvoperation)?)
+                        let result = binary_on_vector(&bvop0, &bvop1, *num_elements as u32, bvoperation)?;
+                        self.state.bv_symbols_map.insert(result.get_id(),
+                                                         RecordedValue::BinaryOperation(
+                                                             Box::new(op0_sym),
+                                                             Box::new(op1_sym),
+                                                             binaryOpToString(&bop)));
+                        self.state.record_bv_result(bop, result)
                     },
                     ty => Err(Error::MalformedInstruction(format!("Expected binary operation's vector operands to have integer elements, but elements are type {:?}", ty))),
                 }
@@ -606,7 +625,6 @@ where
 
         let op0_sym = get_operand_symbol_or_unknown(&self.state, &icmp.operand0, "symex_icmp op0");
         let op1_sym = get_operand_symbol_or_unknown(&self.state, &icmp.operand1, "symex_icmp op1");
-
         self.state.recorded_operations.push(RecordedOperation::Compare(op0_sym,op1_sym, icmp.predicate));
 
         let bvpred = Self::intpred_to_bvpred(icmp.predicate);
