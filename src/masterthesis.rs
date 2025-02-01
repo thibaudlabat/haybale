@@ -4,6 +4,7 @@ use itertools::Itertools;
 use std::collections::HashMap;
 use std::fmt;
 use std::ops::Deref;
+use llvm_ir::Operand;
 
 pub type BVId = i32;
 pub type BvSymbolsMap = HashMap<BVId, RecordedValue>;
@@ -27,7 +28,8 @@ pub enum RecordedValue {
 pub enum RecordedOperation {
     Read(RecordedValue, RecordedValue), // Target, Value
     Write(RecordedValue, RecordedValue), // Target, Value
-    Call(RecordedValue, Vec<RecordedValue>) // Function name, Vec<Arguments as Strings>
+    Call(RecordedValue, Vec<RecordedValue>), // Function name, Vec<Arguments as Strings>
+    Compare(RecordedValue, RecordedValue, llvm_ir::IntPredicate),
 }
 
 // Implement Display for RecordedOperationValue
@@ -78,6 +80,9 @@ impl fmt::Display for RecordedOperation {
                 }
                 Ok(())
             }
+            RecordedOperation::Compare(a, b, predicate) => {
+               // write!(f, "COMPARE:\n\tA = {}\n\tB = {}\n\tPREDICATE = {}", a, b, predicate)
+            }
         }
     }
 }
@@ -88,6 +93,25 @@ pub fn get_bv_symbol_or_unknown<B: Backend>(state: &State<B>, bv: &<B as Backend
     match state.bv_symbols_map.get(&bv.get_id()) {
         None => { RecordedValue::Unknown(unknown_str.to_string()) }
         Some(x) => { x.clone() }
+    }
+}
+
+pub fn get_operand_symbol_or_unknown<B: Backend>(state: &State<B>, op: &Operand, unknown_str: &str) -> RecordedValue
+{
+    match op{
+        Operand::LocalOperand { .. } => {
+            let bv = state.operand_to_bv(&op).unwrap();
+            match state.bv_symbols_map.get(&bv.get_id()) {
+                None => { RecordedValue::Unknown(unknown_str.to_string()) }
+                Some(x) => { x.clone() }
+            }
+        }
+        Operand::ConstantOperand(const_op) => {
+            RecordedValue::Constant(const_op.to_string())
+        }
+        Operand::MetadataOperand => {
+            panic!("metadata operand");
+        }
     }
 }
 

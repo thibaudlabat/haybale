@@ -17,7 +17,7 @@ use crate::backend::*;
 use crate::config::*;
 use crate::error::*;
 use crate::function_hooks::*;
-use crate::masterthesis::{get_bv_symbol_or_unknown, RecordedOperation, RecordedValue};
+use crate::masterthesis::{get_bv_symbol_or_unknown,get_operand_symbol_or_unknown, RecordedOperation, RecordedValue};
 use crate::parameter_val::ParameterVal;
 use crate::project::Project;
 use crate::return_value::*;
@@ -603,6 +603,12 @@ where
         debug!("Symexing icmp {:?}", icmp);
         let bvfirstop = self.state.operand_to_bv(&icmp.operand0)?;
         let bvsecondop = self.state.operand_to_bv(&icmp.operand1)?;
+
+        let op0_sym = get_operand_symbol_or_unknown(&self.state, &icmp.operand0, "symex_icmp op0");
+        let op1_sym = get_operand_symbol_or_unknown(&self.state, &icmp.operand1, "symex_icmp op1");
+
+        self.state.recorded_operations.push(RecordedOperation::Compare(op0_sym,op1_sym, icmp.predicate));
+
         let bvpred = Self::intpred_to_bvpred(icmp.predicate);
         let op0_type = self.state.type_of(&icmp.operand0);
         let op1_type = self.state.type_of(&icmp.operand1);
