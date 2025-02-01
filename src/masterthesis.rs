@@ -3,6 +3,7 @@ use crate::State;
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::fmt;
+use std::ops::Deref;
 
 pub type BVId = i32;
 pub type BvSymbolsMap = HashMap<BVId, RecordedValue>;
@@ -18,6 +19,8 @@ pub enum RecordedValue {
     Deref(Box<RecordedValue>),
     FieldAccess(Box<RecordedValue>, String, String, Vec<Box<RecordedValue>>), // structure base, LLVM structure type string, field name, indices vector (offset)
     BaseArgument(i32, String, String), // parameter ID, name, type
+    FunctionReturnValue(Box<RecordedValue>), // Called function (value is not stored)
+    FunctionReturnTarget(Box<RecordedValue>), // Called function (value is not stored)
 }
 
 #[derive(Clone)]
@@ -46,6 +49,12 @@ impl fmt::Display for RecordedValue {
             }
             RecordedValue::BaseArgument(param_id, name, arg_type) => {
                 write!(f, "base_arg({param_id}, {name}, {arg_type})")
+            }
+            RecordedValue::FunctionReturnValue(func_name) => {
+                write!(f, "func_retval({func_name})")
+            }
+            RecordedValue::FunctionReturnTarget(func_name) => {
+                write!(f, "func_retdest({func_name})")
             }
         }
         }
@@ -81,3 +90,39 @@ pub fn get_bv_symbol_or_unknown<B: Backend>(state: &State<B>, bv: &<B as Backend
         Some(x) => { x.clone() }
     }
 }
+
+pub fn hasNoUnknownOrFunc(val: &RecordedValue) -> bool {
+    match val{
+        RecordedValue::String(_) => {true}
+        RecordedValue::Unknown(_) => {false}
+        RecordedValue::Apply(x, _) => {hasNoUnknownOrFunc(x)}
+        RecordedValue::Constant(_) => {true}
+        RecordedValue::Global(_) => {true}
+        RecordedValue::Deref(x) => {hasNoUnknownOrFunc(x)}
+        RecordedValue::FieldAccess(a, b, c, d) => {
+            hasNoUnknownOrFunc(a) && d.iter().all(|x| hasNoUnknownOrFunc(x.deref()))
+        }
+        RecordedValue::BaseArgument(_, _, _) => {true}
+        RecordedValue::FunctionReturnValue(_) => {false}
+        RecordedValue::FunctionReturnTarget(_) => {false}
+    }
+}
+
+
+pub fn comesFromBaseArgument(val: &RecordedValue) -> bool {
+    match val{
+        RecordedValue::String(_) => {false}
+        RecordedValue::Unknown(_) => {false}
+        RecordedValue::Apply(x, _) => {comesFromBaseArgument(x)}
+        RecordedValue::Constant(_) => {false}
+        RecordedValue::Global(_) => {false}
+        RecordedValue::Deref(x) => {comesFromBaseArgument(x)}
+        RecordedValue::FieldAccess(a, b, c, d) => {
+            comesFromBaseArgument(a) || d.iter().all(|x| comesFromBaseArgument(x.deref()))
+        }
+        RecordedValue::BaseArgument(_, _, _) => {true}
+        RecordedValue::FunctionReturnValue(_) => {false}
+        RecordedValue::FunctionReturnTarget(_) => {false}
+    }
+}
+

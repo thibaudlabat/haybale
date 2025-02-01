@@ -724,10 +724,7 @@ where
 
                 let mut result = bvop.sext(dest_size - source_size);
 
-                let symbol = match self.state.bv_symbols_map.get(&bvop.get_id()) {
-                    None => { RecordedValue::Unknown("sext".to_string()) }
-                    Some(s) => { s.clone() }
-                };
+                let symbol = get_bv_symbol_or_unknown(&self.state, &result, "sext");
                 let symbol_with_sext = RecordedValue::Apply(Box::new(symbol), "sext".to_string());
 
                 self.state.bv_symbols_map.insert(result.get_id(), symbol_with_sext);
@@ -880,10 +877,7 @@ where
 
         let mut r = self.state.read(&bvaddr, dest_size)?;
 
-        let r_symbol = (match self.state.bv_symbols_map.get(&r.get_id()) {
-            None => { RecordedValue::Unknown("read value".to_string()) },
-            Some(s) => { s.clone() }
-        });
+        let r_symbol = get_bv_symbol_or_unknown(&self.state, &r, "read value");
         let r_symbol_deref = RecordedValue::Deref(Box::new(r_symbol));
 
         self.state.bv_symbols_map.insert(r.get_id(), r_symbol_deref);
@@ -896,25 +890,25 @@ where
         let bvval = self.state.operand_to_bv(&store.value)?;
         let bvaddr = self.state.operand_to_bv(&store.address)?;
 
-        let id = bvval.get_id();
-        let concrete = bvval.as_u64();
-        let value_str_1 = (match self.state.bv_symbols_map.get(&bvval.get_id()) {
-            None => { "" } //
-            Some(s) => &*{ s.to_string() }
-        });
-        let value_str_2 = match concrete {
-            None => { "" }
-            Some(int) => &*{ int.to_string().clone() }
-        };
-        let value_str = value_str_1.to_owned() + value_str_2;
-        let index_symbol = match self.state.bv_symbols_map.get(&bvaddr.get_id()) {
-            None => { RecordedValue::Unknown("symex_store index".to_string()) }
-            Some(s) => {s.clone()}
+        let value_symbol = match &store.value{
+            Operand::ConstantOperand(const_op) => {
+                RecordedValue::Constant(const_op.to_string())
+            }
+            _ => {
+                get_bv_symbol_or_unknown(&self.state, &bvval, "symex_store value")
+            }
         };
 
-        self.state.recorded_operations.push(RecordedOperation::Write(
-            index_symbol,
-            RecordedValue::String(value_str)));
+        let index_symbol = match &store.address{
+            Operand::ConstantOperand(const_op) => {
+                RecordedValue::Constant(const_op.to_string())
+            }
+            _ => {
+                get_bv_symbol_or_unknown(&self.state, &bvaddr, "symex_store index")
+            }
+        };
+
+        self.state.recorded_operations.push(RecordedOperation::Write(index_symbol, value_symbol));
         self.state.write(&bvaddr, bvval)
     }
 
@@ -1491,7 +1485,7 @@ where
                 i += 1;
             }
             self.state.recorded_operations.push(RecordedOperation::Call(
-                function_name,
+                function_name.clone(),
                 recorded_arguments));
         }
 
@@ -1512,6 +1506,19 @@ where
                     Name::from(format!("{}_retval", "indirect_call")),
                     width,
                 )?;
+                let bv_id = bv.get_id();
+
+
+                /*
+                As we're not evaluation functions at the moment,
+                we can't set the true values here.
+                 */
+                //let target = get_bv_symbol_or_unknown(&self.state, &bv, "symex_call return dest");
+                let target = RecordedValue::FunctionReturnTarget(Box::new(function_name.clone()));
+                let value = RecordedValue::FunctionReturnValue(Box::new(function_name));
+                self.state.recorded_operations.push(RecordedOperation::Write(target, value.clone()));
+                self.state.bv_symbols_map.insert(bv_id, value);
+
                 self.state
                     .assign_bv_to_name(call.dest.as_ref().unwrap().clone(), bv)?;
             },

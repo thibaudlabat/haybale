@@ -484,6 +484,8 @@ mod tests {
     use boolector::option::{BtorOption, ModelGen};
     use boolector::{BVSolution, BV};
     use std::rc::Rc;
+    use itertools::Itertools;
+    use crate::backend::BV;
 
     // Basically the `get_a_solution_for_bv()` method from `State`,
     // without requiring that we construct a `State` or depend on the

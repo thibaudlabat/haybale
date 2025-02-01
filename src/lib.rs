@@ -101,4 +101,4 @@ impl SolutionValue {
     }
 }
 
-pub use masterthesis::RecordedOperation;
+pub use masterthesis::*;
