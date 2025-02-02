@@ -97,7 +97,8 @@ pub struct State<'p, B: Backend> {
 
     pub bv_symbols_map : BvSymbolsMap,
     pub recorded_operations: Vec<RecordedOperation>, // Target, Value
-    pub instrCount: u32
+    pub instrCount: u32,
+    pub hasUnresolvedFunctions: bool
 }
 
 /// Describes a location in LLVM IR in a format more suitable for printing - for
@@ -383,7 +384,8 @@ struct BacktrackPoint<'p, B: Backend> {
 
     bv_symbols_map : BvSymbolsMap,
     recorded_operations: Vec<RecordedOperation>,
-    instrCount: u32
+    instrCount: u32,
+    hasUnresolvedFunctions: bool
 }
 
 impl<'p, B: Backend> fmt::Display for BacktrackPoint<'p, B> {
@@ -497,7 +499,8 @@ where
             config,
             bv_symbols_map: Default::default(),
             recorded_operations: vec![],
-            instrCount: 0
+            instrCount: 0,
+            hasUnresolvedFunctions: false
         };
 
 
@@ -1482,7 +1485,9 @@ where
             .map(|addr| {
                 self.global_allocations
                     .get_func_for_address(addr, self.cur_loc.module)
-                    .ok_or_else(|| Error::FailedToResolveFunctionPointer(addr))
+                    .ok_or_else(|| {
+                        Error::FailedToResolveFunctionPointer(addr)
+                    })
             })
             .collect::<Result<HashSet<_>>>()?;
         if callables.len() > n {
@@ -1969,7 +1974,8 @@ where
             path_len: self.path.len(),
             bv_symbols_map: self.bv_symbols_map.clone(),
             recorded_operations: self.recorded_operations.clone(),
-            instrCount: self.instrCount
+            instrCount: self.instrCount,
+            hasUnresolvedFunctions: self.hasUnresolvedFunctions
         });
     }
 
@@ -1988,6 +1994,7 @@ where
             self.bv_symbols_map = bp.bv_symbols_map.clone();
             self.recorded_operations = bp.recorded_operations.clone();
             self.instrCount = bp.instrCount;
+            self.hasUnresolvedFunctions = bp.hasUnresolvedFunctions;
             Ok(true)
         } else {
             Ok(false)

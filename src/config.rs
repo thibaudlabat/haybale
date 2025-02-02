@@ -199,6 +199,11 @@ pub struct Config<'p, B: Backend> {
     ///
     /// Default is `true`.
     pub print_module_name: bool,
+
+    /// Will ignore function that we cannot find (unsupported llvm intrinsic, externa function, ..)
+    /// Side-effects are ignored
+    /// Default is `false`.
+    pub ignore_not_found_function: bool
 }
 
 /// Enum used for the `null_pointer_checking` option in `Config`.
@@ -301,6 +306,7 @@ impl<'p, B: Backend> Default for Config<'p, B> {
             demangling: None,
             print_source_info: true,
             print_module_name: true,
+            ignore_not_found_function: false,
         }
     }
 }

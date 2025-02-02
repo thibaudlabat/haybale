@@ -9,9 +9,11 @@ use llvm_ir::Operand;
 
 pub type BVId = i32;
 pub type BvSymbolsMap = HashMap<BVId, RecordedValue>;
+use serde::{Serialize, Deserialize};
 
 
-#[derive(Clone)]
+
+#[derive(Serialize, Deserialize, Clone)]
 pub enum RecordedValue {
     DebugString(String),
     Unknown(String),
@@ -22,16 +24,20 @@ pub enum RecordedValue {
     FieldAccess(Box<RecordedValue>, String, String, Vec<Box<RecordedValue>>), // structure base, LLVM structure type string, field name, indices vector (offset)
     BaseArgument(i32, String, String), // parameter ID, name, type
     BinaryOperation(Box<RecordedValue>, Box<RecordedValue>, String),
-    ICmp(Box<RecordedValue>, Box<RecordedValue>, llvm_ir::predicates::IntPredicate),
+
+    ICmp(Box<RecordedValue>, Box<RecordedValue>, String), // a, b, predicate as a string
+    // Not serializable:
+    // ICmp(Box<RecordedValue>, Box<RecordedValue>, llvm_ir::predicates::IntPredicate),
     Function(String),
-    FunctionPointer(Box<RecordedValue>)
+    FunctionPointer(Box<RecordedValue>),
+    UnevaluatedFunctionReturnValue(String), // function name
 }
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum RecordedOperation {
     Read(RecordedValue, RecordedValue), // Target, Value
     Write(RecordedValue, RecordedValue), // Target, Value
-    Call(RecordedValue, Vec<RecordedValue>), // Function name, Vec<Arguments as Strings>
+    Call(RecordedValue, Vec<RecordedValue>, bool), // Function name, Vec<Arguments as Strings>, isFound
     CondBranch(RecordedValue, bool),
 }
 
@@ -67,6 +73,9 @@ impl fmt::Display for RecordedValue {
             RecordedValue::Function(func) => {
                 write!(f, "func({func})")
             }
+            RecordedValue::UnevaluatedFunctionReturnValue(func) => {
+                write!(f, "uneval_retval({func})")
+            }
         }
         }
     }
@@ -80,9 +89,9 @@ impl fmt::Display for RecordedOperation {
                 write!(f, "READ:\n\tTARGET = {}\n\tVALUE = {}", target, value),
             RecordedOperation::Write(target, value) =>
                 write!(f, "WRITE:\n\tTARGET = {}\n\tVALUE = {}", target, value),
-            RecordedOperation::Call(func_name, args) => {
+            RecordedOperation::Call(func_name, args, isFound) => {
                 // Convert args to strings and join them
-                write!(f,"CALL:\n\tFUNCTION = {}\n", func_name);
+                write!(f,"CALL:\n\tFUNCTION = {}\n\tFOUND = {}\n", func_name, isFound);
                 for i in 0..args.len() {
                     let arg = &args[i];
                     write!(f,"\targ[{}] = {}\n", i, arg);
@@ -146,6 +155,10 @@ pub fn hasNoUnknown(val: &RecordedValue) -> bool {
         RecordedValue::FunctionPointer(func) => {
             hasNoUnknown(func)
         }
+        RecordedValue::UnevaluatedFunctionReturnValue(_) => {
+            // TODO: should be false..?
+            true
+        }
     }
 }
 
@@ -171,6 +184,10 @@ pub fn comesFromBaseArgument(val: &RecordedValue) -> bool {
         RecordedValue::Function(func) => {false}
         RecordedValue::FunctionPointer(func) => {
             comesFromBaseArgument(func)
+        }
+        RecordedValue::UnevaluatedFunctionReturnValue(_) => {
+            // TODO: we dont' know...
+            false
         }
     }
 }

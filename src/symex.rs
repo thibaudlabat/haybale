@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use either::Either;
 use itertools::Itertools;
 use llvm_ir::instruction::{BinaryOp, InlineAssembly};
@@ -307,9 +308,33 @@ where
                     #[cfg(feature = "llvm-10-or-greater")]
                     Instruction::AtomicRMW(armw) => self.symex_atomicrmw(armw),
                     Instruction::Call(call) => match self.symex_call(call) {
-                        Err(e) => Err(e),
                         Ok(None) => Ok(()),
                         Ok(Some(symexresult)) => return Ok(Some(symexresult)),
+                        Err(e) => {
+                            if self.state.config.ignore_not_found_function {
+                                // TODO: record the error!
+                                //let bv:B::BV = B::BV::new(self.state.solver.clone(), 64, None);
+                                //self.state.bv_symbols_map.insert(bv.get_id(),RecordedValue::UnevaluatedFunctionReturnValue(call.to_string()));
+                                //return Ok(Some(ReturnValue::Return(bv)));
+                                // println!("FunctionNotFound !");
+
+                                if call
+                                    .arguments
+                                    .iter()
+                                    .any(|e| matches!(e.0, Operand::MetadataOperand))
+                                {
+                                    // ignore Call with Metadata Operand
+                                }
+                                else {
+                                    // We just set a flag
+                                    self.state.hasUnresolvedFunctions = true;
+                                }
+                                return Ok(None);
+                            }
+                                 else {
+                                return Err(e);
+                            }
+                        },
                     },
                     Instruction::LandingPad(_) => return Err(Error::UnsupportedInstruction("Encountered an LLVM `LandingPad` instruction, but wasn't expecting it (there is no inflight exception)".to_owned())),
                     _ => return Err(Error::UnsupportedInstruction(format!("instruction {:?}", inst))),
@@ -641,7 +666,7 @@ where
             Type::IntegerType { bits } if *bits == 1 => match op0_type.as_ref() {
                 Type::IntegerType { .. } | Type::VectorType { .. } | Type::PointerType { .. } => {
                     let result = bvpred(&bvfirstop, &bvsecondop);
-                    self.state.bv_symbols_map.insert(result.get_id(),RecordedValue::ICmp(Box::new(op0_sym),Box::new(op1_sym), icmp.predicate));
+                    self.state.bv_symbols_map.insert(result.get_id(),RecordedValue::ICmp(Box::new(op0_sym),Box::new(op1_sym), icmp.predicate.to_string()));
                     self.state.record_bv_result(icmp, result)
                 },
                 ty => Err(Error::MalformedInstruction(format!("Expected ICmp to have operands of type integer, pointer, or vector of integers, but got type {:?}", ty))),
@@ -656,7 +681,7 @@ where
                         let zero = self.state.zero(1);
                         let one = self.state.one(1);
                         let final_bv = binary_on_vector(&bvfirstop, &bvsecondop, *num_elements as u32, |a, b| bvpred(a, b).cond_bv(&one, &zero))?;
-                        self.state.bv_symbols_map.insert(final_bv.get_id(),RecordedValue::ICmp(Box::new(op0_sym),Box::new(op1_sym), icmp.predicate));
+                        self.state.bv_symbols_map.insert(final_bv.get_id(),RecordedValue::ICmp(Box::new(op0_sym),Box::new(op1_sym), icmp.predicate.to_string()));
                         self.state.record_bv_result(icmp, final_bv)
                     },
                     ty => Err(Error::MalformedInstruction(format!("Expected ICmp to have operands of type integer, pointer, or vector of integers, but got type {:?}", ty))),
@@ -1449,7 +1474,6 @@ where
             }
         }
 
-
         // Recording the arguments
         if call
             .arguments
@@ -1473,7 +1497,8 @@ where
             }
             self.state.recorded_operations.push(RecordedOperation::Call(
                 function_name.clone(),
-                recorded_arguments));
+                recorded_arguments,
+            true));
         }
 
          debug!("Symexing call {:?}", call);
@@ -1630,9 +1655,11 @@ where
                     }
                 } else {
                     match self.state.config.function_hooks.get_default_hook() {
-                        None => Err(Error::FunctionNotFound(
-                            self.state.demangle(called_funcname),
-                        )),
+                        None => {
+                            Err(Error::FunctionNotFound(
+                                self.state.demangle(called_funcname),
+                            ))
+                        },
                         Some(hook) => {
                             let hook = hook.clone(); // end the implicit borrow of `self` that arose from `get_default_hook()`. The `clone` is just an `Rc` and a `usize`, as of this writing
                             let pretty_funcname = self.state.demangle(called_funcname);
@@ -2130,6 +2157,9 @@ where
         &mut self,
         invoke: &'p terminator::Invoke,
     ) -> Result<Option<ReturnValue<B::BV>>> {
+
+        panic!("masterthesis: unsupported");
+
         debug!("Symexing invoke {:?}", invoke);
         match self.resolve_function(&invoke.function)? {
             ResolvedFunction::HookActive { hook, hooked_thing } => {

@@ -20,6 +20,7 @@ cpp_demangle = "0.2"
 rustc-demangle = "0.1"
 log = "0.4.20"
 rustversion = "1.0"
+serde = { version = "1.0.217", features = ["derive"] }
 
 [dev-dependencies]
 env_logger = "0.10"
