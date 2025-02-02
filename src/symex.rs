@@ -950,31 +950,11 @@ where
 
     fn symex_gep(&mut self, gep: &'p instruction::GetElementPtr) -> Result<()> {
         debug!("Symexing gep {:?}", gep);
-        let src_str = gep.address.to_string();
         let mut dest_str = gep.dest.to_string();
         dest_str += "(";
         let indices: &Vec<Operand> = &gep.indices;
         dest_str += &*indices.iter().map(|i| {
-            match i {
-                Operand::ConstantOperand(o) => {
-                    let str = match o.deref() {
-                        Constant::Int { bits, value } => { value.to_string() }
-                        (_) => { "?".to_string() }
-                    };
-                    str
-                }
-                // LocalOperand, when the array index is a variable
-                Operand::LocalOperand { .. } => {
-                    let index_bv = self.state.operand_to_bv(&i).unwrap();
-                    match self.state.bv_symbols_map.get(&index_bv.get_id()) {
-                        None => {
-                            "[unknown]".to_string()
-                        }
-                        Some(s) => { s.to_string() }
-                    }.to_string()
-                }
-                Operand::MetadataOperand => { "?".to_string() }
-            }
+            get_operand_symbol_or_unknown(&self.state,&i, "symex_gep index")
         }).join(", ");
         dest_str += ")";
         match self.state.type_of(gep).as_ref() {
@@ -990,22 +970,7 @@ where
 
 
             let indices_symbols:Vec<Box<RecordedValue>> = gep.indices.iter().map(|x|{
-                match(x){
-                    Operand::LocalOperand { .. } => {
-
-                        match self.state.bv_symbols_map.get(&offset.get_id()) {
-                            None => { RecordedValue::Unknown("symex_gep offset".to_string()) }
-                            Some(x) => { x.clone() }
-                        }
-
-                    }
-                    Operand::ConstantOperand(const_op) => {
-                        RecordedValue::Constant(const_op.to_string())
-                    }
-                    Operand::MetadataOperand => {
-                        RecordedValue::Unknown("symex_gep metadata_operand".to_string())
-                    }
-                }
+                get_operand_symbol_or_unknown(&self.state,&x, "symex_gep offset")
             })
                 .map(|x|{Box::new(x)})
                 .collect();
@@ -1498,24 +1463,10 @@ where
             let mut i = 0;
             let mut recorded_arguments: Vec<RecordedValue> = vec![];
             for arg in &call.arguments {
-                let operand: &Operand = &arg.0;
-                let symbol;
-                match operand {
-                    Operand::MetadataOperand => {
-                        panic!("unexpected metadata operand");
-                    }
-
-                    Operand::LocalOperand { .. } => {
-                        let bv = self.state.operand_to_bv(operand).unwrap();
-                        symbol = match self.state.bv_symbols_map.get(&bv.get_id()) {
-                            None => RecordedValue::Unknown(format!("{function_name} call_arg({i})")),
-                            Some(s) => s.clone(),
-                        };
-                    }
-                    Operand::ConstantOperand(const_op) => {
-                        symbol = RecordedValue::Constant(const_op.to_string());
-                    }
-                }
+                let unknown_str = &*format!("{function_name} call_arg({i})");
+                let symbol = get_operand_symbol_or_unknown(&self.state,
+                                                           &arg.0,
+                                                           unknown_str);
 
                 recorded_arguments.push(symbol.clone());
                 i += 1;

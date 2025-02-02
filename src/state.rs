@@ -25,7 +25,7 @@ use crate::demangling::Demangling;
 use crate::error::*;
 use crate::function_hooks::{self, FunctionHooks};
 use crate::global_allocations::*;
-use crate::hooks;
+use crate::{get_bv_symbol_or_unknown, hooks};
 use crate::masterthesis::{BvSymbolsMap, RecordedOperation, RecordedValue};
 use crate::project::Project;
 use crate::solver_utils::{self, PossibleSolutions};
@@ -1574,14 +1574,8 @@ where
         }
 
 
-        let symbol = match self.bv_symbols_map.get(&addr.get_id()) {
-            Some(s) => {s.clone()}
-            None => {
-                let x = RecordedValue::Unknown("read addr".to_string());
-                self.bv_symbols_map.insert(addr.get_id(), x.clone());
-                x
-            }
-        };
+        let symbol = get_bv_symbol_or_unknown(&self, &addr, "read addr");
+        self.bv_symbols_map.insert(addr.get_id(), symbol.clone());
 
         let symbol_val = RecordedValue::Apply(Box::new(symbol.clone()), "readval()".to_string());
         self.bv_symbols_map.insert(retval.get_id(),symbol_val.clone());
