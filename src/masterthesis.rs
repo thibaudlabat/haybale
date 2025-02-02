@@ -13,7 +13,7 @@ pub type BvSymbolsMap = HashMap<BVId, RecordedValue>;
 
 #[derive(Clone)]
 pub enum RecordedValue {
-    String(String),
+    DebugString(String),
     Unknown(String),
     Apply(Box<RecordedValue>, String),
     Constant(String),
@@ -21,10 +21,10 @@ pub enum RecordedValue {
     Deref(Box<RecordedValue>),
     FieldAccess(Box<RecordedValue>, String, String, Vec<Box<RecordedValue>>), // structure base, LLVM structure type string, field name, indices vector (offset)
     BaseArgument(i32, String, String), // parameter ID, name, type
-    FunctionReturnValue(Box<RecordedValue>), // Called function (value is not stored)
-    FunctionReturnTarget(Box<RecordedValue>), // Called function (value is not stored)
     BinaryOperation(Box<RecordedValue>, Box<RecordedValue>, String),
-    ICmp(Box<RecordedValue>, Box<RecordedValue>, llvm_ir::predicates::IntPredicate)
+    ICmp(Box<RecordedValue>, Box<RecordedValue>, llvm_ir::predicates::IntPredicate),
+    Function(String),
+    FunctionPointer(Box<RecordedValue>)
 }
 
 #[derive(Clone)]
@@ -39,7 +39,7 @@ pub enum RecordedOperation {
 impl fmt::Display for RecordedValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RecordedValue::String(s) => write!(f, "{s}"),
+            RecordedValue::DebugString(s) => write!(f, "{s}"),
             RecordedValue::Unknown(s) => write!(f, "[unknown: {s}]"),
             RecordedValue::Apply(left, right) =>
                 write!(f, "{left} {right}"),
@@ -55,17 +55,17 @@ impl fmt::Display for RecordedValue {
             RecordedValue::BaseArgument(param_id, name, arg_type) => {
                 write!(f, "base_arg({param_id}, {name}, {arg_type})")
             }
-            RecordedValue::FunctionReturnValue(func_name) => {
-                write!(f, "func_retval({func_name})")
-            }
-            RecordedValue::FunctionReturnTarget(func_name) => {
-                write!(f, "func_retdest({func_name})")
-            }
             RecordedValue::BinaryOperation(a, b, binop) => {
                 write!(f, "binop({}, {}, {:?})", a, b, binop)
             }
             RecordedValue::ICmp(a, b, predicate) => {
                 write!(f, "icmp({}, {}, {:?})", a, b, predicate)
+            }
+            RecordedValue::FunctionPointer(func) => {
+                write!(f, "funcptr({func})")
+            }
+            RecordedValue::Function(func) => {
+                write!(f, "func({func})")
             }
         }
         }
@@ -124,25 +124,27 @@ pub fn get_operand_symbol_or_unknown<B: Backend>(state: &State<B>, op: &Operand,
     }
 }
 
-pub fn hasNoUnknownOrFunc(val: &RecordedValue) -> bool {
+pub fn hasNoUnknown(val: &RecordedValue) -> bool {
     match val{
-        RecordedValue::String(_) => {true}
+        RecordedValue::DebugString(_) => {true}
         RecordedValue::Unknown(_) => {false}
-        RecordedValue::Apply(x, _) => {hasNoUnknownOrFunc(x)}
+        RecordedValue::Apply(x, _) => { hasNoUnknown(x)}
         RecordedValue::Constant(_) => {true}
         RecordedValue::Global(_) => {true}
-        RecordedValue::Deref(x) => {hasNoUnknownOrFunc(x)}
+        RecordedValue::Deref(x) => { hasNoUnknown(x)}
         RecordedValue::FieldAccess(a, b, c, d) => {
-            hasNoUnknownOrFunc(a) && d.iter().all(|x| hasNoUnknownOrFunc(x.deref()))
+            hasNoUnknown(a) && d.iter().all(|x| hasNoUnknown(x.deref()))
         }
         RecordedValue::BaseArgument(_, _, _) => {true}
-        RecordedValue::FunctionReturnValue(_) => {false}
-        RecordedValue::FunctionReturnTarget(_) => {false}
         RecordedValue::BinaryOperation(a, b, _) => {
-            hasNoUnknownOrFunc(a) && hasNoUnknownOrFunc(b)
+            hasNoUnknown(a) && hasNoUnknown(b)
         }
         RecordedValue::ICmp(a, b, _) => {
-            hasNoUnknownOrFunc(a) && hasNoUnknownOrFunc(b)
+            hasNoUnknown(a) && hasNoUnknown(b)
+        }
+        RecordedValue::Function(func) => {true}
+        RecordedValue::FunctionPointer(func) => {
+            hasNoUnknown(func)
         }
     }
 }
@@ -150,7 +152,7 @@ pub fn hasNoUnknownOrFunc(val: &RecordedValue) -> bool {
 
 pub fn comesFromBaseArgument(val: &RecordedValue) -> bool {
     match val{
-        RecordedValue::String(_) => {false}
+        RecordedValue::DebugString(_) => {false}
         RecordedValue::Unknown(_) => {false}
         RecordedValue::Apply(x, _) => {comesFromBaseArgument(x)}
         RecordedValue::Constant(_) => {false}
@@ -160,13 +162,15 @@ pub fn comesFromBaseArgument(val: &RecordedValue) -> bool {
             comesFromBaseArgument(a) || d.iter().all(|x| comesFromBaseArgument(x.deref()))
         }
         RecordedValue::BaseArgument(_, _, _) => {true}
-        RecordedValue::FunctionReturnValue(_) => {false}
-        RecordedValue::FunctionReturnTarget(_) => {false}
         RecordedValue::BinaryOperation(a, b, _) => {
             comesFromBaseArgument(a) || comesFromBaseArgument(b)
         }
         RecordedValue::ICmp(a,b, _) => {
             comesFromBaseArgument(a) || comesFromBaseArgument(b)
+        }
+        RecordedValue::Function(func) => {false}
+        RecordedValue::FunctionPointer(func) => {
+            comesFromBaseArgument(func)
         }
     }
 }

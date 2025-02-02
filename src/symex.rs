@@ -1120,7 +1120,7 @@ where
                     };
                     let mut allocated = self.state.allocate(allocation_size_bits);
                     let sym = format!("alloca({})", alloca.dest.to_string());
-                    self.state.bv_symbols_map.insert(allocated.get_id(), RecordedValue::String(sym));
+                    self.state.bv_symbols_map.insert(allocated.get_id(), RecordedValue::DebugString(sym));
                     self.state.record_bv_result(alloca, allocated)
                 },
                 c => Err(Error::UnsupportedInstruction(format!(
@@ -1467,26 +1467,25 @@ where
                     Operand::ConstantOperand(const_op) => {
                         let x = const_op.deref();
                         let str = x.to_string();
-                        function_name = RecordedValue::String(str);
+                        function_name = RecordedValue::Function(str);
                     },
 
                     Operand::LocalOperand { .. } => {
-                        let bv_function = self.state.operand_to_bv(operand).unwrap();
                         // panic!("non const operand function at call");
-                        function_name = match self.state.bv_symbols_map.get(&bv_function.get_id()) {
-                            None => { RecordedValue::Unknown("indirect call site".to_string()) }
-                            Some(s) => { s.clone() }
-                        };
+                        let sym = get_operand_symbol_or_unknown(&self.state,&operand,"indirect call site");
+                        function_name = RecordedValue::FunctionPointer(Box::new(sym));
+
                     },
                     Operand::MetadataOperand => {
                         // TODO?
-                        function_name = RecordedValue::String("(metadata function)".to_string());
+                        function_name = RecordedValue::DebugString("(metadata function)".to_string());
                     }
                 }
             }
         }
 
-        /*
+
+        // Recording the arguments
         if call
             .arguments
             .iter()
@@ -1525,46 +1524,6 @@ where
                 function_name.clone(),
                 recorded_arguments));
         }
-
-
-        debug!("Symexing call {:?}", call);
-
-
-        match self.state.type_of(call).as_ref() {
-            Type::VoidType => {},
-            ty => {
-                let width = self.state.size_in_bits(&ty).ok_or_else(|| {
-                    Error::MalformedInstruction(
-                        "Call return type is an opaque struct type".into(),
-                    )
-                })?;
-                assert_ne!(width, 0, "Function return type has size 0 bits but isn't void type"); // void type was handled above
-                let bv = self.state.new_bv_with_name(
-                    Name::from(format!("{}_retval", "indirect_call")),
-                    width,
-                )?;
-                let bv_id = bv.get_id();
-
-
-                /*
-                As we're not evaluation functions at the moment,
-                we can't set the true values here.
-                 */
-                //let target = get_bv_symbol_or_unknown(&self.state, &bv, "symex_call return dest");
-                let target = RecordedValue::FunctionReturnTarget(Box::new(function_name.clone()));
-                let value = RecordedValue::FunctionReturnValue(Box::new(function_name));
-                self.state.recorded_operations.push(RecordedOperation::Write(target, value.clone()));
-                self.state.bv_symbols_map.insert(bv_id, value);
-
-                self.state
-                    .assign_bv_to_name(call.dest.as_ref().unwrap().clone(), bv)?;
-            },
-        };
-        Ok(None)*/
-
-        // I just fully disabled function call for my purposes.
-        // The original code is below.
-
 
          debug!("Symexing call {:?}", call);
         match self.resolve_function(&call.function)? {
