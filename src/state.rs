@@ -4,7 +4,7 @@ use either::Either;
 use itertools::Itertools;
 use llvm_ir::types::{FPType, NamedStructDef, Typed};
 use llvm_ir::*;
-use log::{debug, info, warn};
+use log::{debug, info, log, warn};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
@@ -889,6 +889,13 @@ where
         thing: &impl instruction::HasResult,
         resultval: B::BV,
     ) -> Result<()> {
+        match self.bv_symbols_map.get(&resultval.get_id()){
+            None => {
+                panic!("Registered a BV without a symbol.");
+            }
+            Some(_) => {}
+        }
+
         let thing_size_in_bits = self.size_in_bits(&self.type_of(thing)).ok_or_else(|| {
             Error::MalformedInstruction("Instruction result type is an opaque struct type".into())
         })?;

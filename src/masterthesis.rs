@@ -24,6 +24,7 @@ pub enum RecordedValue {
     FunctionReturnValue(Box<RecordedValue>), // Called function (value is not stored)
     FunctionReturnTarget(Box<RecordedValue>), // Called function (value is not stored)
     BinaryOperation(Box<RecordedValue>, Box<RecordedValue>, String),
+    ICmp(Box<RecordedValue>, Box<RecordedValue>, llvm_ir::predicates::IntPredicate)
 }
 
 #[derive(Clone)]
@@ -31,7 +32,7 @@ pub enum RecordedOperation {
     Read(RecordedValue, RecordedValue), // Target, Value
     Write(RecordedValue, RecordedValue), // Target, Value
     Call(RecordedValue, Vec<RecordedValue>), // Function name, Vec<Arguments as Strings>
-    Compare(RecordedValue, RecordedValue, llvm_ir::IntPredicate),
+    CondBranch(RecordedValue, bool),
 }
 
 // Implement Display for RecordedOperationValue
@@ -63,6 +64,9 @@ impl fmt::Display for RecordedValue {
             RecordedValue::BinaryOperation(a, b, binop) => {
                 write!(f, "binop({}, {}, {:?})", a, b, binop)
             }
+            RecordedValue::ICmp(a, b, predicate) => {
+                write!(f, "icmp({}, {}, {:?})", a, b, predicate)
+            }
         }
         }
     }
@@ -85,8 +89,8 @@ impl fmt::Display for RecordedOperation {
                 }
                 Ok(())
             }
-            RecordedOperation::Compare(a, b, predicate) => {
-                write!(f, "COMPARE:\n\tA = {}\n\tB = {}\n\tPREDICATE = {}", a, b, predicate)
+            RecordedOperation::CondBranch(a, isTrue) => {
+                write!(f, "CondBranch:\n\tCONDITION = {}\n\tisTrue = {}", a, isTrue)
             }
         }
     }
@@ -137,6 +141,9 @@ pub fn hasNoUnknownOrFunc(val: &RecordedValue) -> bool {
         RecordedValue::BinaryOperation(a, b, _) => {
             hasNoUnknownOrFunc(a) && hasNoUnknownOrFunc(b)
         }
+        RecordedValue::ICmp(a, b, _) => {
+            hasNoUnknownOrFunc(a) && hasNoUnknownOrFunc(b)
+        }
     }
 }
 
@@ -156,6 +163,9 @@ pub fn comesFromBaseArgument(val: &RecordedValue) -> bool {
         RecordedValue::FunctionReturnValue(_) => {false}
         RecordedValue::FunctionReturnTarget(_) => {false}
         RecordedValue::BinaryOperation(a, b, _) => {
+            comesFromBaseArgument(a) || comesFromBaseArgument(b)
+        }
+        RecordedValue::ICmp(a,b, _) => {
             comesFromBaseArgument(a) || comesFromBaseArgument(b)
         }
     }

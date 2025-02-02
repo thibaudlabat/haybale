@@ -627,7 +627,6 @@ where
 
         let op0_sym = get_operand_symbol_or_unknown(&self.state, &icmp.operand0, "symex_icmp op0");
         let op1_sym = get_operand_symbol_or_unknown(&self.state, &icmp.operand1, "symex_icmp op1");
-        self.state.recorded_operations.push(RecordedOperation::Compare(op0_sym,op1_sym, icmp.predicate));
 
         let bvpred = Self::intpred_to_bvpred(icmp.predicate);
         let op0_type = self.state.type_of(&icmp.operand0);
@@ -641,7 +640,9 @@ where
         match self.state.type_of(icmp).as_ref() {
             Type::IntegerType { bits } if *bits == 1 => match op0_type.as_ref() {
                 Type::IntegerType { .. } | Type::VectorType { .. } | Type::PointerType { .. } => {
-                    self.state.record_bv_result(icmp, bvpred(&bvfirstop, &bvsecondop))
+                    let result = bvpred(&bvfirstop, &bvsecondop);
+                    self.state.bv_symbols_map.insert(result.get_id(),RecordedValue::ICmp(Box::new(op0_sym),Box::new(op1_sym), icmp.predicate));
+                    self.state.record_bv_result(icmp, result)
                 },
                 ty => Err(Error::MalformedInstruction(format!("Expected ICmp to have operands of type integer, pointer, or vector of integers, but got type {:?}", ty))),
             },
@@ -655,6 +656,7 @@ where
                         let zero = self.state.zero(1);
                         let one = self.state.one(1);
                         let final_bv = binary_on_vector(&bvfirstop, &bvsecondop, *num_elements as u32, |a, b| bvpred(a, b).cond_bv(&one, &zero))?;
+                        self.state.bv_symbols_map.insert(final_bv.get_id(),RecordedValue::ICmp(Box::new(op0_sym),Box::new(op1_sym), icmp.predicate));
                         self.state.record_bv_result(icmp, final_bv)
                     },
                     ty => Err(Error::MalformedInstruction(format!("Expected ICmp to have operands of type integer, pointer, or vector of integers, but got type {:?}", ty))),
@@ -679,8 +681,11 @@ where
                             "ZExt return type is an opaque struct type".into(),
                         )
                     })?;
+                let result = bvop.zext(dest_size - source_size);
+                let symbol = get_operand_symbol_or_unknown(&self.state,&zext.operand,"symex_zext");
+                self.state.bv_symbols_map.insert(result.get_id(),RecordedValue::Apply(Box::new(symbol),"zext".to_string()));
                 self.state
-                    .record_bv_result(zext, bvop.zext(dest_size - source_size))
+                    .record_bv_result(zext, result)
             },
             #[cfg(feature = "llvm-11-or-greater")]
             Type::VectorType { scalable: true, .. } => {
@@ -821,8 +826,11 @@ where
                             "Trunc return type is an opaque struct type".into(),
                         )
                     })?;
+                let result = bvop.slice(dest_size - 1, 0);
+                let symbol = get_operand_symbol_or_unknown(&self.state,&trunc.operand,"symex_trunc");
+                self.state.bv_symbols_map.insert(result.get_id(),RecordedValue::Apply(Box::new(symbol),"trunc".to_string()));
                 self.state
-                    .record_bv_result(trunc, bvop.slice(dest_size - 1, 0))
+                    .record_bv_result(trunc, result)
             },
             #[cfg(feature = "llvm-11-or-greater")]
             Type::VectorType { scalable: true, .. } => {
@@ -869,6 +877,8 @@ where
     fn symex_cast_op(&mut self, cast: &'p impl instruction::UnaryOp) -> Result<()> {
         debug!("Symexing cast op {:?}", cast);
         let bvop = self.state.operand_to_bv(&cast.get_operand())?;
+        let symbol = get_operand_symbol_or_unknown(&self.state,&cast.get_operand(),"symex_cast_op");
+        self.state.bv_symbols_map.insert(bvop.get_id(), RecordedValue::Apply(Box::new(symbol), "cast".to_string()));
         self.state.record_bv_result(cast, bvop) // from Boolector's perspective a cast is simply a no-op; the bit patterns are equal
     }
 
@@ -1476,6 +1486,7 @@ where
             }
         }
 
+        /*
         if call
             .arguments
             .iter()
@@ -1549,12 +1560,12 @@ where
                     .assign_bv_to_name(call.dest.as_ref().unwrap().clone(), bv)?;
             },
         };
-        Ok(None)
+        Ok(None)*/
 
         // I just fully disabled function call for my purposes.
         // The original code is below.
 
-/*
+
          debug!("Symexing call {:?}", call);
         match self.resolve_function(&call.function)? {
             ResolvedFunction::HookActive { hook, hooked_thing } => {
@@ -1741,7 +1752,7 @@ where
                 }
             },
         }
-         */
+
     }
 
     #[allow(clippy::if_same_then_else)] // in this case, having some identical `if` blocks actually improves readability, I think
@@ -2093,6 +2104,7 @@ where
     ) -> Result<Option<ReturnValue<B::BV>>> {
         debug!("Symexing condbr {:?}", condbr);
         let bvcond = self.state.operand_to_bv(&condbr.condition)?;
+        let bvcond_symbol = get_operand_symbol_or_unknown(&self.state, &condbr.condition,"symex_condbr");
         let true_feasible = self
             .state
             .sat_with_extra_constraints(std::iter::once(&bvcond))?;
@@ -2102,8 +2114,17 @@ where
         if true_feasible && false_feasible {
             debug!("both true and false branches are feasible");
             // for now we choose to explore true first, and backtrack to false if necessary
+
+
+            // Saving the branch result for the backtracking point ("false" branch)
+            self.state.recorded_operations.push(RecordedOperation::CondBranch(bvcond_symbol.clone(),false));
             self.state
                 .save_backtracking_point(&condbr.false_dest, bvcond.not());
+            self.state.recorded_operations.pop();
+
+            // Saving the branch result ("true" branch)
+            self.state.recorded_operations.push(RecordedOperation::CondBranch(bvcond_symbol.clone(),true));
+
             bvcond.assert()?;
             self.state
                 .cur_loc
@@ -2111,6 +2132,7 @@ where
             self.symex_from_cur_loc_through_end_of_function()
         } else if true_feasible {
             debug!("only the true branch is feasible");
+            self.state.recorded_operations.push(RecordedOperation::CondBranch(bvcond_symbol.clone(),true));
             bvcond.assert()?; // unnecessary, but may help Boolector more than it hurts?
             self.state
                 .cur_loc
@@ -2118,6 +2140,7 @@ where
             self.symex_from_cur_loc_through_end_of_function()
         } else if false_feasible {
             debug!("only the false branch is feasible");
+            self.state.recorded_operations.push(RecordedOperation::CondBranch(bvcond_symbol.clone(),false));
             bvcond.not().assert()?; // unnecessary, but may help Boolector more than it hurts?
             self.state
                 .cur_loc
@@ -2556,8 +2579,12 @@ where
             .find(|&(_, bbname)| bbname == prev_bb)
             .map(|(op, _)| op)
             .ok_or_else(|| Error::OtherError(format!("Failed to find a Phi member matching previous BasicBlock. Phi incoming_values are {:?} but we were looking for {:?}", phi.incoming_values, prev_bb)))?;
-        self.state
-            .record_bv_result(phi, self.state.operand_to_bv(&chosen_value)?)
+
+        let bv = self.state.operand_to_bv(&chosen_value)?;
+        let bv_symbol = get_bv_symbol_or_unknown(&self.state, &bv, "symex_phi");
+        self.state.bv_symbols_map.insert(bv.get_id(),
+                                         bv_symbol);
+        self.state.record_bv_result(phi, bv)
     }
 
     fn symex_select(&mut self, select: &'p instruction::Select) -> Result<()> {
