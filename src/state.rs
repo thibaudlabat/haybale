@@ -25,7 +25,7 @@ use crate::demangling::Demangling;
 use crate::error::*;
 use crate::function_hooks::{self, FunctionHooks};
 use crate::global_allocations::*;
-use crate::{get_bv_symbol_or_unknown, hooks};
+use crate::{get_bv_symbol_or_unknown, hooks, FunctionTrace};
 use crate::masterthesis::{BvSymbolsMap, RecordedOperation, RecordedValue};
 use crate::project::Project;
 use crate::solver_utils::{self, PossibleSolutions};
@@ -95,10 +95,7 @@ pub struct State<'p, B: Backend> {
     /// multiple paths.
     function_ptr_cache: HashMap<Location<'p>, u64>,
 
-    pub bv_symbols_map : BvSymbolsMap,
-    pub recorded_operations: Vec<RecordedOperation>, // Target, Value
-    pub instrCount: u32,
-    pub hasUnresolvedFunctions: bool
+    pub trace: FunctionTrace
 }
 
 /// Describes a location in LLVM IR in a format more suitable for printing - for
@@ -382,10 +379,7 @@ struct BacktrackPoint<'p, B: Backend> {
     /// its first `path_len` entries.
     path_len: usize,
 
-    bv_symbols_map : BvSymbolsMap,
-    recorded_operations: Vec<RecordedOperation>,
-    instrCount: u32,
-    hasUnresolvedFunctions: bool
+    pub trace: FunctionTrace
 }
 
 impl<'p, B: Backend> fmt::Display for BacktrackPoint<'p, B> {
@@ -497,10 +491,7 @@ where
             // listed last (out-of-order) so that they can be used above but moved in now
             solver,
             config,
-            bv_symbols_map: Default::default(),
-            recorded_operations: vec![],
-            instrCount: 0,
-            hasUnresolvedFunctions: false
+            trace: Default::default()
         };
 
 
@@ -892,7 +883,7 @@ where
         thing: &impl instruction::HasResult,
         resultval: B::BV,
     ) -> Result<()> {
-        match self.bv_symbols_map.get(&resultval.get_id()){
+        match self.trace.bv_symbols_map.get(&resultval.get_id()){
             None => {
                 panic!("Registered a BV without a symbol.");
             }
@@ -1580,12 +1571,12 @@ where
 
 
         let symbol = get_bv_symbol_or_unknown(&self, &addr, "read addr");
-        self.bv_symbols_map.insert(addr.get_id(), symbol.clone());
+        self.trace.bv_symbols_map.insert(addr.get_id(), symbol.clone());
 
         let symbol_val = RecordedValue::Apply(Box::new(symbol.clone()), "readval()".to_string());
-        self.bv_symbols_map.insert(retval.get_id(),symbol_val.clone());
+        self.trace.bv_symbols_map.insert(retval.get_id(),symbol_val.clone());
 
-        self.recorded_operations.push(RecordedOperation::Read(symbol,
+        self.trace.recorded_operations.push(RecordedOperation::Read(symbol,
                                                               symbol_val));
         Ok(retval)
     }
@@ -1972,10 +1963,7 @@ where
             varmap: self.varmap.clone(),
             mem: self.mem.borrow().clone(),
             path_len: self.path.len(),
-            bv_symbols_map: self.bv_symbols_map.clone(),
-            recorded_operations: self.recorded_operations.clone(),
-            instrCount: self.instrCount,
-            hasUnresolvedFunctions: self.hasUnresolvedFunctions
+            trace: self.trace.clone()
         });
     }
 
@@ -1991,10 +1979,7 @@ where
             self.path.truncate(bp.path_len);
             self.cur_loc = bp.loc;
             bp.constraint.assert()?;
-            self.bv_symbols_map = bp.bv_symbols_map.clone();
-            self.recorded_operations = bp.recorded_operations.clone();
-            self.instrCount = bp.instrCount;
-            self.hasUnresolvedFunctions = bp.hasUnresolvedFunctions;
+            self.trace = bp.trace.clone();
             Ok(true)
         } else {
             Ok(false)

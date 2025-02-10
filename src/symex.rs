@@ -82,7 +82,7 @@ pub fn symex_function<'p, B: Backend>(
                 .unwrap();
 
             let bvparam_symbol = RecordedValue::BaseArgument(i_param,param.name.to_string(),param.ty.to_string());
-            state.bv_symbols_map.insert(bvparam.get_id(), bvparam_symbol);
+            state.trace.bv_symbols_map.insert(bvparam.get_id(), bvparam_symbol);
             i_param +=1;
 
             match paramval {
@@ -277,7 +277,7 @@ where
                 callback(inst, &self.state)?;
             }
 
-            self.state.instrCount += 1;
+            self.state.trace.instrCount += 1;
             let result = if let Ok(binop) = inst.clone().try_into() {
                 self.symex_binop(&binop)
             } else {
@@ -327,7 +327,7 @@ where
                                 }
                                 else {
                                     // We just set a flag
-                                    self.state.hasUnresolvedFunctions = true;
+                                    self.state.trace.hasUnresolvedFunctions = true;
                                 }
                                 return Ok(None);
                             }
@@ -616,7 +616,7 @@ where
         match op_type.as_ref() {
             Type::IntegerType { .. } => {
                 let result = bvoperation(&bvop0, &bvop1);
-                self.state.bv_symbols_map.insert(result.get_id(),
+                self.state.trace.bv_symbols_map.insert(result.get_id(),
                                                  RecordedValue::BinaryOperation(
                                                      Box::new(op0_sym),
                                                      Box::new(op1_sym),
@@ -631,7 +631,7 @@ where
                 match element_type.as_ref() {
                     Type::IntegerType { .. } => {
                         let result = binary_on_vector(&bvop0, &bvop1, *num_elements as u32, bvoperation)?;
-                        self.state.bv_symbols_map.insert(result.get_id(),
+                        self.state.trace.bv_symbols_map.insert(result.get_id(),
                                                          RecordedValue::BinaryOperation(
                                                              Box::new(op0_sym),
                                                              Box::new(op1_sym),
@@ -666,7 +666,7 @@ where
             Type::IntegerType { bits } if *bits == 1 => match op0_type.as_ref() {
                 Type::IntegerType { .. } | Type::VectorType { .. } | Type::PointerType { .. } => {
                     let result = bvpred(&bvfirstop, &bvsecondop);
-                    self.state.bv_symbols_map.insert(result.get_id(),RecordedValue::ICmp(Box::new(op0_sym),Box::new(op1_sym), icmp.predicate.to_string()));
+                    self.state.trace.bv_symbols_map.insert(result.get_id(),RecordedValue::ICmp(Box::new(op0_sym),Box::new(op1_sym), icmp.predicate.to_string()));
                     self.state.record_bv_result(icmp, result)
                 },
                 ty => Err(Error::MalformedInstruction(format!("Expected ICmp to have operands of type integer, pointer, or vector of integers, but got type {:?}", ty))),
@@ -681,7 +681,7 @@ where
                         let zero = self.state.zero(1);
                         let one = self.state.one(1);
                         let final_bv = binary_on_vector(&bvfirstop, &bvsecondop, *num_elements as u32, |a, b| bvpred(a, b).cond_bv(&one, &zero))?;
-                        self.state.bv_symbols_map.insert(final_bv.get_id(),RecordedValue::ICmp(Box::new(op0_sym),Box::new(op1_sym), icmp.predicate.to_string()));
+                        self.state.trace.bv_symbols_map.insert(final_bv.get_id(),RecordedValue::ICmp(Box::new(op0_sym),Box::new(op1_sym), icmp.predicate.to_string()));
                         self.state.record_bv_result(icmp, final_bv)
                     },
                     ty => Err(Error::MalformedInstruction(format!("Expected ICmp to have operands of type integer, pointer, or vector of integers, but got type {:?}", ty))),
@@ -708,7 +708,7 @@ where
                     })?;
                 let result = bvop.zext(dest_size - source_size);
                 let symbol = get_operand_symbol_or_unknown(&self.state,&zext.operand,"symex_zext");
-                self.state.bv_symbols_map.insert(result.get_id(),RecordedValue::Apply(Box::new(symbol),"zext".to_string()));
+                self.state.trace.bv_symbols_map.insert(result.get_id(),RecordedValue::Apply(Box::new(symbol),"zext".to_string()));
                 self.state
                     .record_bv_result(zext, result)
             },
@@ -783,7 +783,7 @@ where
                 let symbol = get_bv_symbol_or_unknown(&self.state, &result, "sext");
                 let symbol_with_sext = RecordedValue::Apply(Box::new(symbol), "sext".to_string());
 
-                self.state.bv_symbols_map.insert(result.get_id(), symbol_with_sext);
+                self.state.trace.bv_symbols_map.insert(result.get_id(), symbol_with_sext);
 
                 self.state.record_bv_result(sext, result)
             },
@@ -853,7 +853,7 @@ where
                     })?;
                 let result = bvop.slice(dest_size - 1, 0);
                 let symbol = get_operand_symbol_or_unknown(&self.state,&trunc.operand,"symex_trunc");
-                self.state.bv_symbols_map.insert(result.get_id(),RecordedValue::Apply(Box::new(symbol),"trunc".to_string()));
+                self.state.trace.bv_symbols_map.insert(result.get_id(),RecordedValue::Apply(Box::new(symbol),"trunc".to_string()));
                 self.state
                     .record_bv_result(trunc, result)
             },
@@ -903,7 +903,7 @@ where
         debug!("Symexing cast op {:?}", cast);
         let bvop = self.state.operand_to_bv(&cast.get_operand())?;
         let symbol = get_operand_symbol_or_unknown(&self.state,&cast.get_operand(),"symex_cast_op");
-        self.state.bv_symbols_map.insert(bvop.get_id(), RecordedValue::Apply(Box::new(symbol), "cast".to_string()));
+        self.state.trace.bv_symbols_map.insert(bvop.get_id(), RecordedValue::Apply(Box::new(symbol), "cast".to_string()));
         self.state.record_bv_result(cast, bvop) // from Boolector's perspective a cast is simply a no-op; the bit patterns are equal
     }
 
@@ -928,7 +928,7 @@ where
                 match op {
                     Constant::GlobalReference { name, ty } => {
                         let sym = RecordedValue::Global(op_ref.to_string());
-                        self.state.bv_symbols_map.insert(bvaddr.get_id(), sym);
+                        self.state.trace.bv_symbols_map.insert(bvaddr.get_id(), sym);
                     }
                     (_) => {}
                 }
@@ -941,7 +941,7 @@ where
         let r_symbol = get_bv_symbol_or_unknown(&self.state, &r, "read value");
         let r_symbol_deref = RecordedValue::Deref(Box::new(r_symbol));
 
-        self.state.bv_symbols_map.insert(r.get_id(), r_symbol_deref);
+        self.state.trace.bv_symbols_map.insert(r.get_id(), r_symbol_deref);
         self.state
             .record_bv_result(load, r)
     }
@@ -969,7 +969,7 @@ where
             }
         };
 
-        self.state.recorded_operations.push(RecordedOperation::Write(index_symbol, value_symbol));
+        self.state.trace.recorded_operations.push(RecordedOperation::Write(index_symbol, value_symbol));
         self.state.write(&bvaddr, bvval)
     }
 
@@ -1010,7 +1010,7 @@ where
                     dest_str,
                     indices_symbols);
 
-                self.state.bv_symbols_map.insert(result.get_id(), result_with_offset);
+                self.state.trace.bv_symbols_map.insert(result.get_id(), result_with_offset);
 
                 self.state.record_bv_result(gep, result)
             },
@@ -1110,7 +1110,7 @@ where
                     };
                     let mut allocated = self.state.allocate(allocation_size_bits);
                     let sym = format!("alloca({})", alloca.dest.to_string());
-                    self.state.bv_symbols_map.insert(allocated.get_id(), RecordedValue::DebugString(sym));
+                    self.state.trace.bv_symbols_map.insert(allocated.get_id(), RecordedValue::DebugString(sym));
                     self.state.record_bv_result(alloca, allocated)
                 },
                 c => Err(Error::UnsupportedInstruction(format!(
@@ -1495,7 +1495,7 @@ where
                 recorded_arguments.push(symbol.clone());
                 i += 1;
             }
-            self.state.recorded_operations.push(RecordedOperation::Call(
+            self.state.trace.recorded_operations.push(RecordedOperation::Call(
                 function_name.clone(),
                 recorded_arguments,
             true));
@@ -2054,13 +2054,13 @@ where
 
 
             // Saving the branch result for the backtracking point ("false" branch)
-            self.state.recorded_operations.push(RecordedOperation::CondBranch(bvcond_symbol.clone(),false));
+            self.state.trace.recorded_operations.push(RecordedOperation::CondBranch(bvcond_symbol.clone(),false));
             self.state
                 .save_backtracking_point(&condbr.false_dest, bvcond.not());
-            self.state.recorded_operations.pop();
+            self.state.trace.recorded_operations.pop();
 
             // Saving the branch result ("true" branch)
-            self.state.recorded_operations.push(RecordedOperation::CondBranch(bvcond_symbol.clone(),true));
+            self.state.trace.recorded_operations.push(RecordedOperation::CondBranch(bvcond_symbol.clone(),true));
 
             bvcond.assert()?;
             self.state
@@ -2069,7 +2069,7 @@ where
             self.symex_from_cur_loc_through_end_of_function()
         } else if true_feasible {
             debug!("only the true branch is feasible");
-            self.state.recorded_operations.push(RecordedOperation::CondBranch(bvcond_symbol.clone(),true));
+            self.state.trace.recorded_operations.push(RecordedOperation::CondBranch(bvcond_symbol.clone(),true));
             bvcond.assert()?; // unnecessary, but may help Boolector more than it hurts?
             self.state
                 .cur_loc
@@ -2077,7 +2077,7 @@ where
             self.symex_from_cur_loc_through_end_of_function()
         } else if false_feasible {
             debug!("only the false branch is feasible");
-            self.state.recorded_operations.push(RecordedOperation::CondBranch(bvcond_symbol.clone(),false));
+            self.state.trace.recorded_operations.push(RecordedOperation::CondBranch(bvcond_symbol.clone(),false));
             bvcond.not().assert()?; // unnecessary, but may help Boolector more than it hurts?
             self.state
                 .cur_loc
@@ -2522,7 +2522,7 @@ where
 
         let bv = self.state.operand_to_bv(&chosen_value)?;
         let bv_symbol = get_bv_symbol_or_unknown(&self.state, &bv, "symex_phi");
-        self.state.bv_symbols_map.insert(bv.get_id(),
+        self.state.trace.bv_symbols_map.insert(bv.get_id(),
                                          bv_symbol);
         self.state.record_bv_result(phi, bv)
     }

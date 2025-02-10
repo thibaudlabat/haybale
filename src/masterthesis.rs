@@ -29,7 +29,7 @@ pub enum RecordedValue {
     UnevaluatedFunctionReturnValue(String), // function name
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum RecordedOperation {
     Read(RecordedValue, RecordedValue), // Target, Value
     Write(RecordedValue, RecordedValue), // Target, Value
@@ -104,7 +104,7 @@ impl fmt::Display for RecordedOperation {
 
 pub fn get_bv_symbol_or_unknown<B: Backend>(state: &State<B>, bv: &<B as Backend>::BV, unknown_str: &str) -> RecordedValue
 {
-    match state.bv_symbols_map.get(&bv.get_id()) {
+    match state.trace.bv_symbols_map.get(&bv.get_id()) {
         None => { RecordedValue::Unknown(unknown_str.to_string()) }
         Some(x) => { x.clone() }
     }
@@ -115,7 +115,7 @@ pub fn get_operand_symbol_or_unknown<B: Backend>(state: &State<B>, op: &Operand,
     match op{
         Operand::LocalOperand { .. } => {
             let bv = state.operand_to_bv(&op).unwrap();
-            match state.bv_symbols_map.get(&bv.get_id()) {
+            match state.trace.bv_symbols_map.get(&bv.get_id()) {
                 None => { RecordedValue::Unknown(unknown_str.to_string()) }
                 Some(x) => { x.clone() }
             }
@@ -152,4 +152,23 @@ pub fn binaryOpToString(bop: &BinaryOp) -> String{
         BinaryOp::FDiv(_) => {"FDiv"}
         BinaryOp::FRem(_) => {"FRem"}
     }.to_string()
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct FunctionTrace{
+    pub bv_symbols_map : BvSymbolsMap,
+    pub recorded_operations: Vec<RecordedOperation>,
+    pub instrCount: u32,
+    pub hasUnresolvedFunctions: bool
+}
+
+impl Default for FunctionTrace {
+    fn default() -> FunctionTrace {
+        FunctionTrace {
+            bv_symbols_map: Default::default(),
+            recorded_operations: vec![],
+            instrCount: 0,
+            hasUnresolvedFunctions: false,
+        }
+    }
 }
