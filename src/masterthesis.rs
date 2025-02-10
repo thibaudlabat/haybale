@@ -1,19 +1,17 @@
 use crate::backend::{Backend, BV};
 use crate::State;
 use itertools::Itertools;
-use std::collections::HashMap;
-use std::fmt;
-use std::ops::Deref;
 use llvm_ir::instruction::groups::BinaryOp;
 use llvm_ir::Operand;
+use std::collections::HashMap;
+use std::fmt;
 
 pub type BVId = i32;
 pub type BvSymbolsMap = HashMap<BVId, RecordedValue>;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 
-
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum RecordedValue {
     DebugString(String),
     Unknown(String),
@@ -26,8 +24,6 @@ pub enum RecordedValue {
     BinaryOperation(Box<RecordedValue>, Box<RecordedValue>, String),
 
     ICmp(Box<RecordedValue>, Box<RecordedValue>, String), // a, b, predicate as a string
-    // Not serializable:
-    // ICmp(Box<RecordedValue>, Box<RecordedValue>, llvm_ir::predicates::IntPredicate),
     Function(String),
     FunctionPointer(Box<RecordedValue>),
     UnevaluatedFunctionReturnValue(String), // function name
