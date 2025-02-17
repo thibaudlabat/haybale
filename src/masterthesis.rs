@@ -167,7 +167,7 @@ pub fn get_operand_symbol_or_unknown<B: Backend>(state: &State<B>, op: &Operand,
         Operand::ConstantOperand(const_op) => {
             RecordedValue::Constant(const_op.to_string())
         }
-        Operand::MetadataOperand => {
+        Operand::MetadataOperand(_) => {
             panic!("metadata operand");
         }
     }

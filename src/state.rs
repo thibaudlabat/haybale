@@ -940,7 +940,7 @@ where
                 Ok(b)
             },
 
-            Operand::MetadataOperand => panic!("Can't convert {:?} to BV", op),
+            Operand::MetadataOperand(_) => panic!("Can't convert {:?} to BV", op),
         }
     }
 

@@ -315,7 +315,7 @@ where
                                 if call
                                     .arguments
                                     .iter()
-                                    .any(|e| matches!(e.0, Operand::MetadataOperand))
+                                    .any(|e| matches!(e.0, Operand::MetadataOperand(_)))
                                 {
                                     // ignore Call with Metadata Operand
                                 }
@@ -1447,6 +1447,7 @@ where
     ///
     /// If the returned value is `Ok(None)`, then we finished the call normally, and execution should continue from here.
     fn symex_call(&mut self, call: &'p instruction::Call) -> Result<Option<ReturnValue<B::BV>>> {
+        let mut cfi_class = "direct_call";
         let function_name;
         match &call.function {
             Either::Left(_inline_asm) => {
@@ -1464,9 +1465,9 @@ where
                             let cfi_class = match &call.arguments.get(1).unwrap().deref().0{
                                 Operand::LocalOperand { .. } => { panic!("Found LocalOperand instead of MetadataOperand."); }
                                 Operand::ConstantOperand(_) => { panic!("Found ConstantOperand instead of MetadataOperand."); }
-                                Operand::MetadataOperand => {
-                                    let x =123;
-                                    x
+                                Operand::MetadataOperand(s) => {
+                                    // println!("{}",s);
+                                    s // _ZTSFiiiE
                                 }
                             }.to_string();
                             self.state.trace.bv_cfi_types.insert(cfi_ptr_bv.get_id(), cfi_class.clone());
@@ -1476,11 +1477,22 @@ where
 
                     Operand::LocalOperand { .. } => {
                         // panic!("non const operand function at call");
+
+                        let bv_called_func = self.state.operand_to_bv(&operand).unwrap();
+                        match self.state.trace.bv_cfi_types.get(&bv_called_func.get_id()){
+                            None => {
+                                cfi_class = "cfi_class_not_found";
+                            }
+                            Some(s) => {
+                                cfi_class = s;
+                            }
+                        }
+
                         let sym = get_operand_symbol_or_unknown(&self.state,&operand,"indirect call site");
                         function_name = RecordedValue::FunctionPointer(Box::new(sym));
 
                     },
-                    Operand::MetadataOperand => {
+                    Operand::MetadataOperand(_) => {
                         // TODO?
                         function_name = RecordedValue::DebugString("(metadata function)".to_string());
                     }
@@ -1492,7 +1504,7 @@ where
         if call
             .arguments
             .iter()
-            .any(|e| matches!(e.0, Operand::MetadataOperand))
+            .any(|e| matches!(e.0, Operand::MetadataOperand(_)))
         {
             // println!("Call to '{function_name}' with Metadata Operand");
         } else {
@@ -1509,11 +1521,14 @@ where
                 recorded_arguments.push(symbol.clone());
                 i += 1;
             }
+
+
+
             self.state.trace.recorded_operations.push(RecordedOperation::Call(
                 function_name.clone(),
                 recorded_arguments,
                 true,
-                "cfi type not found".to_string()
+                cfi_class.to_string()
             ));
         }
 
