@@ -11,7 +11,7 @@ keywords = ["symbolic", "llvm", "IR", "SMT"]
 license = "MIT"
 
 [dependencies]
-llvm-ir = "0.8.2"
+llvm-ir = {  path = "../llvm-ir" }
 boolector = "0.4.3"
 either = "1.9"
 itertools = "0.11"
