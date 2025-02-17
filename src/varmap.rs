@@ -52,7 +52,8 @@ impl<V: BV> VarMap<V> {
             solver,
             active_version: DoubleKeyedMap::new(),
             version_num: DoubleKeyedMap::new(),
-            max_version_num: max_versions_of_name - 1, // because 0 is a version
+            // Added 20 here because of the bug
+            max_version_num: max_versions_of_name - 1 +20, // because 0 is a version
         }
     }
 

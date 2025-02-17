@@ -312,12 +312,6 @@ where
                         Ok(Some(symexresult)) => return Ok(Some(symexresult)),
                         Err(e) => {
                             if self.state.config.ignore_not_found_function {
-                                // TODO: record the error!
-                                //let bv:B::BV = B::BV::new(self.state.solver.clone(), 64, None);
-                                //self.state.bv_symbols_map.insert(bv.get_id(),RecordedValue::UnevaluatedFunctionReturnValue(call.to_string()));
-                                //return Ok(Some(ReturnValue::Return(bv)));
-                                // println!("FunctionNotFound !");
-
                                 if call
                                     .arguments
                                     .iter()
@@ -329,7 +323,13 @@ where
                                     // We just set a flag
                                     self.state.trace.hasUnresolvedFunctions = true;
                                 }
-                                return Ok(None);
+
+                                // Creating an unconstrained bitvector just so that
+                                // we return in the same way as if the function had been executed
+                                // instead of ignored.
+                                let bv:B::BV = B::BV::new(self.state.solver.clone(), 64, None);
+                                self.state.trace.bv_symbols_map.insert(bv.get_id(),RecordedValue::UnevaluatedFunctionReturnValue(call.to_string()));
+                                return Ok(Some(ReturnValue::Return(bv)));
                             }
                                  else {
                                 return Err(e);
@@ -780,7 +780,7 @@ where
 
                 let mut result = bvop.sext(dest_size - source_size);
 
-                let symbol = get_bv_symbol_or_unknown(&self.state, &result, "sext");
+                let symbol = get_bv_symbol_or_unknown(&self.state, &bvop, "sext");
                 let symbol_with_sext = RecordedValue::Apply(Box::new(symbol), "sext".to_string());
 
                 self.state.trace.bv_symbols_map.insert(result.get_id(), symbol_with_sext);
@@ -1004,7 +1004,7 @@ where
                 let mut result = bvbase.add(&offset);
                 let result_symbol = get_bv_symbol_or_unknown(&self.state, &bvbase,"symex_gep base");
 
-                let result_with_offset = RecordedValue::FieldAccess(
+                let result_with_offset = RecordedValue::GetElementPtr(
                     Box::new(result_symbol),
                     gep.to_string(),
                     dest_str,
@@ -1457,6 +1457,20 @@ where
                     Operand::ConstantOperand(const_op) => {
                         let x = const_op.deref();
                         let str = x.to_string();
+                        if str == "@llvm.type.test"{
+                            // %1 = call i1 @llvm.type.test(i8* %0, metadata !"_ZTSFiiiE"), !dbg !33, !nosanitize !15
+                            assert_eq!(call.arguments.len(), 2);
+                            let cfi_ptr_bv = self.state.operand_to_bv(&call.arguments.get(0).unwrap().deref().0).unwrap();
+                            let cfi_class = match &call.arguments.get(1).unwrap().deref().0{
+                                Operand::LocalOperand { .. } => { panic!("Found LocalOperand instead of MetadataOperand."); }
+                                Operand::ConstantOperand(_) => { panic!("Found ConstantOperand instead of MetadataOperand."); }
+                                Operand::MetadataOperand => {
+                                    let x =123;
+                                    x
+                                }
+                            }.to_string();
+                            self.state.trace.bv_cfi_types.insert(cfi_ptr_bv.get_id(), cfi_class.clone());
+                        }
                         function_name = RecordedValue::Function(str);
                     },
 
@@ -1498,7 +1512,9 @@ where
             self.state.trace.recorded_operations.push(RecordedOperation::Call(
                 function_name.clone(),
                 recorded_arguments,
-            true));
+                true,
+                "cfi type not found".to_string()
+            ));
         }
 
          debug!("Symexing call {:?}", call);

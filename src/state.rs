@@ -26,7 +26,7 @@ use crate::error::*;
 use crate::function_hooks::{self, FunctionHooks};
 use crate::global_allocations::*;
 use crate::{get_bv_symbol_or_unknown, hooks, FunctionTrace};
-use crate::masterthesis::{BvSymbolsMap, RecordedOperation, RecordedValue};
+use crate::masterthesis::{RecordedOperation, RecordedValue};
 use crate::project::Project;
 use crate::solver_utils::{self, PossibleSolutions};
 use crate::varmap::{RestoreInfo, VarMap};
@@ -885,7 +885,7 @@ where
     ) -> Result<()> {
         match self.trace.bv_symbols_map.get(&resultval.get_id()){
             None => {
-                panic!("Registered a BV without a symbol.");
+                println!("Registered a BV without a symbol.");
             }
             Some(_) => {}
         }

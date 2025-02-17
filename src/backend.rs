@@ -7,7 +7,6 @@ use boolector::{BVSolution, Btor};
 use std::fmt;
 use std::ops::Deref;
 use std::rc::Rc;
-use crate::masterthesis::BvSymbolsMap;
 
 /// A `Backend` is just a collection of types which together implement the necessary traits
 pub trait Backend: Clone {

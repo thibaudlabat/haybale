@@ -7,11 +7,10 @@ use std::collections::HashMap;
 use std::fmt;
 
 pub type BVId = i32;
-pub type BvSymbolsMap = HashMap<BVId, RecordedValue>;
 use serde::{Deserialize, Serialize};
 
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum RecordedValue {
     DebugString(String),
     Unknown(String),
@@ -19,7 +18,7 @@ pub enum RecordedValue {
     Constant(String),
     Global(String),
     Deref(Box<RecordedValue>),
-    FieldAccess(Box<RecordedValue>, String, String, Vec<Box<RecordedValue>>), // structure base, LLVM structure type string, field name, indices vector (offset)
+    GetElementPtr(Box<RecordedValue>, String, String, Vec<Box<RecordedValue>>), // structure base, LLVM structure type string, field name, indices vector (offset)
     BaseArgument(i32, String, String), // parameter ID, name, type
     BinaryOperation(Box<RecordedValue>, Box<RecordedValue>, String),
 
@@ -29,11 +28,56 @@ pub enum RecordedValue {
     UnevaluatedFunctionReturnValue(String), // function name
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
+impl PartialEq for RecordedValue {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            // GetElementPtr ignores String arguments, only compares base and indices
+            (RecordedValue::GetElementPtr(base1, _, _, indices1),
+                RecordedValue::GetElementPtr(base2, _, _, indices2)) => {
+                base1 == base2 && indices1 == indices2
+            },
+
+            // BaseArgument only compares parameter ID
+            (RecordedValue::BaseArgument(id1, _, _),
+                RecordedValue::BaseArgument(id2, _, _)) => {
+                id1 == id2
+            },
+
+            // Unknown and UnevaluatedFunctionReturnValue always return false
+            (RecordedValue::Unknown(_), _) |
+            (_, RecordedValue::Unknown(_)) |
+            (RecordedValue::UnevaluatedFunctionReturnValue(_), _) |
+            (_, RecordedValue::UnevaluatedFunctionReturnValue(_)) => false,
+
+            // Normal equality comparisons for other variants
+            (RecordedValue::DebugString(s1), RecordedValue::DebugString(s2)) => s1 == s2,
+            (RecordedValue::Apply(v1, s1), RecordedValue::Apply(v2, s2)) => v1 == v2 && s1 == s2,
+            (RecordedValue::Constant(s1), RecordedValue::Constant(s2)) => s1 == s2,
+            (RecordedValue::Global(s1), RecordedValue::Global(s2)) => s1 == s2,
+            (RecordedValue::Deref(v1), RecordedValue::Deref(v2)) => v1 == v2,
+            (RecordedValue::BinaryOperation(a1, b1, op1),
+                RecordedValue::BinaryOperation(a2, b2, op2)) => {
+                a1 == a2 && b1 == b2 && op1 == op2
+            },
+            (RecordedValue::ICmp(a1, b1, pred1),
+                RecordedValue::ICmp(a2, b2, pred2)) => {
+                a1 == a2 && b1 == b2 && pred1 == pred2
+            },
+            (RecordedValue::Function(s1), RecordedValue::Function(s2)) => s1 == s2,
+            (RecordedValue::FunctionPointer(v1), RecordedValue::FunctionPointer(v2)) => v1 == v2,
+
+            // Different variants are not equal
+            _ => false,
+        }
+    }
+}
+
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub enum RecordedOperation {
     Read(RecordedValue, RecordedValue), // Target, Value
     Write(RecordedValue, RecordedValue), // Target, Value
-    Call(RecordedValue, Vec<RecordedValue>, bool), // Function name, Vec<Arguments as Strings>, isFound
+    Call(RecordedValue, Vec<RecordedValue>, bool, String), // Function name, Vec<Arguments as Strings>, isFound, Function type
     CondBranch(RecordedValue, bool),
 }
 
@@ -48,7 +92,7 @@ impl fmt::Display for RecordedValue {
             RecordedValue::Constant(value) => {write!(f, "[constant: {value}]")},
             RecordedValue::Global(value) => {write!(f, "[global: {value}]")},
             RecordedValue::Deref(value) => { write!(f, "{value} deref()") },
-            RecordedValue::FieldAccess(struct_base, struct_type, field, offset) => {
+            RecordedValue::GetElementPtr(struct_base, struct_type, field, offset) => {
                 let offsets = offset.iter()
                     .map(|x| { x.to_string() })
                     .join(", ");
@@ -85,9 +129,9 @@ impl fmt::Display for RecordedOperation {
                 write!(f, "READ:\n\tTARGET = {}\n\tVALUE = {}", target, value),
             RecordedOperation::Write(target, value) =>
                 write!(f, "WRITE:\n\tTARGET = {}\n\tVALUE = {}", target, value),
-            RecordedOperation::Call(func_name, args, isFound) => {
+            RecordedOperation::Call(func_name, args, isFound, func_type) => {
                 // Convert args to strings and join them
-                write!(f,"CALL:\n\tFUNCTION = {}\n\tFOUND = {}\n", func_name, isFound);
+                write!(f,"CALL:\n\tFUNCTION = {func_name}\n\tTYPE = {func_type}\n");
                 for i in 0..args.len() {
                     let arg = &args[i];
                     write!(f,"\targ[{}] = {}\n", i, arg);
@@ -154,9 +198,10 @@ pub fn binaryOpToString(bop: &BinaryOp) -> String{
     }.to_string()
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct FunctionTrace{
-    pub bv_symbols_map : BvSymbolsMap,
+    pub bv_symbols_map : HashMap<BVId, RecordedValue>, // RecordedValue associated with each Bitvector
+    pub bv_cfi_types : HashMap<i32,String>, // recorded CFI types with each Bitvector (function pointers)
     pub recorded_operations: Vec<RecordedOperation>,
     pub instrCount: u32,
     pub hasUnresolvedFunctions: bool
@@ -165,7 +210,8 @@ pub struct FunctionTrace{
 impl Default for FunctionTrace {
     fn default() -> FunctionTrace {
         FunctionTrace {
-            bv_symbols_map: Default::default(),
+            bv_symbols_map: HashMap::new(),
+            bv_cfi_types: HashMap::new(),
             recorded_operations: vec![],
             instrCount: 0,
             hasUnresolvedFunctions: false,
