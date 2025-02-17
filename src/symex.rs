@@ -308,7 +308,7 @@ where
                     #[cfg(feature = "llvm-10-or-greater")]
                     Instruction::AtomicRMW(armw) => self.symex_atomicrmw(armw),
                     Instruction::Call(call) => match self.symex_call(call) {
-                        Ok(None) => Ok(()),
+                        Ok(None) => { Ok(()) },
                         Ok(Some(symexresult)) => return Ok(Some(symexresult)),
                         Err(e) => {
                             if self.state.config.ignore_not_found_function {
@@ -329,7 +329,8 @@ where
                                 // instead of ignored.
                                 let bv:B::BV = B::BV::new(self.state.solver.clone(), 64, None);
                                 self.state.trace.bv_symbols_map.insert(bv.get_id(),RecordedValue::UnevaluatedFunctionReturnValue(call.to_string()));
-                                return Ok(Some(ReturnValue::Return(bv)));
+                                //return Ok(Some(ReturnValue::Return(bv)));
+                                Ok(())
                             }
                                  else {
                                 return Err(e);
@@ -1472,7 +1473,11 @@ where
                             }.to_string();
                             self.state.trace.bv_cfi_types.insert(cfi_ptr_bv.get_id(), cfi_class.clone());
                         }
-                        function_name = RecordedValue::Function(str);
+                        /*if str.chars().next() != Some('@'){
+                            println!("FUNC {str}");
+                        }*/
+                        function_name = RecordedValue::Function(str.clone());
+
                     },
 
                     Operand::LocalOperand { .. } => {
