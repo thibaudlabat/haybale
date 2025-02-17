@@ -327,10 +327,10 @@ where
                                 // Creating an unconstrained bitvector just so that
                                 // we return in the same way as if the function had been executed
                                 // instead of ignored.
-                                let bv:B::BV = B::BV::new(self.state.solver.clone(), 64, None);
+                                let bv:B::BV = self.state.new_bv_with_name(Name::from(call.to_string()), 64).unwrap();
                                 self.state.trace.bv_symbols_map.insert(bv.get_id(),RecordedValue::UnevaluatedFunctionReturnValue(call.to_string()));
-                                //return Ok(Some(ReturnValue::Return(bv)));
-                                Ok(())
+                                return Ok(Some(ReturnValue::Return(bv)));
+                                //Ok(())
                             }
                                  else {
                                 return Err(e);
@@ -781,7 +781,7 @@ where
 
                 let mut result = bvop.sext(dest_size - source_size);
 
-                let symbol = get_bv_symbol_or_unknown(&self.state, &bvop, "sext");
+                let symbol = get_operand_symbol_or_unknown(&self.state, &sext.operand, "sext");
                 let symbol_with_sext = RecordedValue::Apply(Box::new(symbol), "sext".to_string());
 
                 self.state.trace.bv_symbols_map.insert(result.get_id(), symbol_with_sext);
@@ -957,7 +957,7 @@ where
                 RecordedValue::Constant(const_op.to_string())
             }
             _ => {
-                get_bv_symbol_or_unknown(&self.state, &bvval, "symex_store value")
+                get_operand_symbol_or_unknown(&self.state, &store.value, "symex_store value")
             }
         };
 
@@ -966,7 +966,7 @@ where
                 RecordedValue::Constant(const_op.to_string())
             }
             _ => {
-                get_bv_symbol_or_unknown(&self.state, &bvaddr, "symex_store index")
+                get_operand_symbol_or_unknown(&self.state, &store.address, "symex_store index")
             }
         };
 
@@ -1003,7 +1003,7 @@ where
 
 
                 let mut result = bvbase.add(&offset);
-                let result_symbol = get_bv_symbol_or_unknown(&self.state, &bvbase,"symex_gep base");
+                let result_symbol = get_operand_symbol_or_unknown(&self.state, &gep.address,"symex_gep base");
 
                 let result_with_offset = RecordedValue::GetElementPtr(
                     Box::new(result_symbol),
@@ -1599,6 +1599,8 @@ where
                                 Name::from(format!("{}_retval", called_funcname)),
                                 width,
                             )?;
+                            self.state.trace.bv_symbols_map.insert(bv.get_id(),RecordedValue::UnevaluatedFunctionReturnValue(call.to_string()));
+
                             self.state
                                 .assign_bv_to_name(call.dest.as_ref().unwrap().clone(), bv)?;
                         },
@@ -2556,8 +2558,8 @@ where
             .map(|(op, _)| op)
             .ok_or_else(|| Error::OtherError(format!("Failed to find a Phi member matching previous BasicBlock. Phi incoming_values are {:?} but we were looking for {:?}", phi.incoming_values, prev_bb)))?;
 
-        let bv = self.state.operand_to_bv(&chosen_value)?;
-        let bv_symbol = get_bv_symbol_or_unknown(&self.state, &bv, "symex_phi");
+        let bv = self.state.operand_to_bv(&chosen_value).unwrap();
+        let bv_symbol = get_operand_symbol_or_unknown(&self.state, chosen_value, "symex_phi");
         self.state.trace.bv_symbols_map.insert(bv.get_id(),
                                          bv_symbol);
         self.state.record_bv_result(phi, bv)
@@ -2578,6 +2580,11 @@ where
                 let bvcond = self.state.operand_to_bv(&select.condition)?;
                 let bvtrueval = self.state.operand_to_bv(&select.true_value)?;
                 let bvfalseval = self.state.operand_to_bv(&select.false_value)?;
+
+                let bvcond_symbol = get_operand_symbol_or_unknown(&self.state, &select.condition, "select.condition");
+                let bvtrueval_symbol = get_operand_symbol_or_unknown(&self.state, &select.true_value, "select.true_value");
+                let bvfalseval_symbol = get_operand_symbol_or_unknown(&self.state, &select.false_value, "select.false_value");
+
                 let do_feasibility_checks = false;
                 if do_feasibility_checks {
                     let true_feasible = self
@@ -2587,8 +2594,14 @@ where
                         .state
                         .sat_with_extra_constraints(std::iter::once(&bvcond.not()))?;
                     if true_feasible && false_feasible {
+                        let bv_result =bvcond.cond_bv(&bvtrueval, &bvfalseval);
+                            self.state.trace.bv_symbols_map.insert(bv_result.get_id(),RecordedValue::Select(
+                                Box::new(bvcond_symbol),
+                                Box::new(bvtrueval_symbol),
+                                Box::new(bvfalseval_symbol)
+                            ));
                         self.state
-                            .record_bv_result(select, bvcond.cond_bv(&bvtrueval, &bvfalseval))
+                            .record_bv_result(select, bv_result)
                     } else if true_feasible {
                         bvcond.assert()?; // unnecessary, but may help Boolector more than it hurts?
                         self.state.record_bv_result(select, bvtrueval)
@@ -2600,8 +2613,14 @@ where
                         Err(Error::Unsat)
                     }
                 } else {
+                    let bv_result = bvcond.cond_bv(&bvtrueval, &bvfalseval);
+                    self.state.trace.bv_symbols_map.insert(bv_result.get_id(),RecordedValue::Select(
+                        Box::new(bvcond_symbol),
+                        Box::new(bvtrueval_symbol),
+                        Box::new(bvfalseval_symbol)
+                    ));
                     self.state
-                        .record_bv_result(select, bvcond.cond_bv(&bvtrueval, &bvfalseval))
+                        .record_bv_result(select, bv_result)
                 }
             },
             #[cfg(feature = "llvm-11-or-greater")]

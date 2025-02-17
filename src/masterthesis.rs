@@ -26,6 +26,9 @@ pub enum RecordedValue {
     Function(String),
     FunctionPointer(Box<RecordedValue>),
     UnevaluatedFunctionReturnValue(String), // function name
+
+    // LLVM Select instruction, which could not be decided
+    Select(Box<RecordedValue>, Box<RecordedValue>, Box<RecordedValue>), // Condition, True val, False val
 }
 
 impl PartialEq for RecordedValue {
@@ -115,6 +118,9 @@ impl fmt::Display for RecordedValue {
             }
             RecordedValue::UnevaluatedFunctionReturnValue(func) => {
                 write!(f, "uneval_retval({func})")
+            }
+            RecordedValue::Select(cond, trueval, falseval) => {
+                write!(f, "select({cond}, {trueval}, {falseval})")
             }
         }
         }
