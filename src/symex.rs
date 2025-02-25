@@ -1458,8 +1458,33 @@ where
                 match operand {
                     Operand::ConstantOperand(const_op) => {
                         let x = const_op.deref();
-                        let str = x.to_string();
-                        if str == "@llvm.type.test"{
+
+
+                        let func_name = match x {
+                            Constant::GlobalReference { name, .. } => {
+                                // Direct reference to a function - just get the name
+                                name.to_string()
+                            },
+                            Constant::BitCast (val) => {
+                                // If it's a bitcast or inttoptr, extract the underlying function name
+                                if let Constant::GlobalReference { name, .. } = val.operand.as_ref() {
+                                    name.to_string()
+                                } else {
+                                    x.to_string() // Fall back to original behavior
+                                }
+                            },
+                            Constant::IntToPtr (val) => {
+                                // If it's a bitcast or inttoptr, extract the underlying function name
+                                if let Constant::GlobalReference { name, .. } = val.operand.as_ref() {
+                                    name.to_string()
+                                } else {
+                                    x.to_string() // Fall back to original behavior
+                                }
+                            },
+                            _ => x.to_string() // For other constants, use original behavior
+                        };
+
+                        if func_name == "@llvm.type.test"{
                             // %1 = call i1 @llvm.type.test(i8* %0, metadata !"_ZTSFiiiE"), !dbg !33, !nosanitize !15
                             assert_eq!(call.arguments.len(), 2);
                             let cfi_ptr_bv = self.state.operand_to_bv(&call.arguments.get(0).unwrap().deref().0).unwrap();
@@ -1476,7 +1501,7 @@ where
                         /*if str.chars().next() != Some('@'){
                             println!("FUNC {str}");
                         }*/
-                        function_name = RecordedValue::Function(str.clone());
+                        function_name = RecordedValue::Function(func_name.clone());
 
                     },
 
