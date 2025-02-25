@@ -1484,7 +1484,7 @@ where
                             _ => x.to_string() // For other constants, use original behavior
                         };
 
-                        if func_name == "@llvm.type.test"{
+                        if func_name == "%llvm.type.test"{
                             // %1 = call i1 @llvm.type.test(i8* %0, metadata !"_ZTSFiiiE"), !dbg !33, !nosanitize !15
                             assert_eq!(call.arguments.len(), 2);
                             let cfi_ptr_bv = self.state.operand_to_bv(&call.arguments.get(0).unwrap().deref().0).unwrap();
