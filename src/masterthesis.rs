@@ -155,8 +155,12 @@ impl fmt::Display for RecordedOperation {
 pub fn get_bv_symbol_or_unknown<B: Backend>(state: &State<B>, bv: &<B as Backend>::BV, unknown_str: &str) -> RecordedValue
 {
     match state.trace.bv_symbols_map.get(&bv.get_id()) {
-        None => { RecordedValue::Unknown(unknown_str.to_string()) }
-        Some(x) => { x.clone() }
+        None => {
+            RecordedValue::Unknown(unknown_str.to_string())
+        }
+        Some(x) => {
+            x.clone()
+        }
     }
 }
 
@@ -166,8 +170,12 @@ pub fn get_operand_symbol_or_unknown<B: Backend>(state: &State<B>, op: &Operand,
         Operand::LocalOperand { .. } => {
             let bv = state.operand_to_bv(&op).unwrap();
             match state.trace.bv_symbols_map.get(&bv.get_id()) {
-                None => { RecordedValue::Unknown(unknown_str.to_string()) }
-                Some(x) => { x.clone() }
+                None => {
+                    RecordedValue::Unknown(unknown_str.to_string())
+                }
+                Some(x) => {
+                    x.clone()
+                }
             }
         }
         Operand::ConstantOperand(const_op) => {

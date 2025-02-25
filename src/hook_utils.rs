@@ -15,6 +15,7 @@ use std::convert::{TryFrom, TryInto};
 // causes a conflict.
 #[rustversion::before(1.51)]
 use reduce::Reduce;
+use crate::get_operand_symbol_or_unknown;
 
 /// Set `num_bytes` bytes of memory at address `addr` each to the value `val`.
 /// Each individual byte will be set to `val`, so only the lowest 8 bits of `val`
@@ -128,11 +129,18 @@ pub fn memcpy<B: Backend>(
     src: &Operand,
     num_bytes: &Operand,
 ) -> Result<B::BV> {
-    let dest = state.operand_to_bv(&dest)?;
-    let src = state.operand_to_bv(&src)?;
+    let dest_symbol = get_operand_symbol_or_unknown(&state,&dest,"memcpy dest");
+    let dest_bv = state.operand_to_bv(&dest)?;
+    state.trace.bv_symbols_map.insert(dest_bv.get_id(), dest_symbol);
+
+    let src_symbol = get_operand_symbol_or_unknown(&state,&src,"memcpy src");
+    let src_bv = state.operand_to_bv(&src)?;
+    state.trace.bv_symbols_map.insert(src_bv.get_id(), src_symbol);
+
+
     let num_bytes = state.operand_to_bv(num_bytes)?;
 
-    memcpy_bv(state, &dest, &src, &num_bytes)
+    memcpy_bv(state, &dest_bv, &src_bv, &num_bytes)
 }
 
 /// Just like `memcpy()` above, but takes `BV`s instead of `Operand`s for its arguments.
