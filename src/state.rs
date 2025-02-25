@@ -869,6 +869,13 @@ where
     /// of the `BV` would exceed `max_versions_of_name` -- see
     /// [`Config`](struct.Config.html).)
     pub fn assign_bv_to_name(&mut self, name: Name, bv: B::BV) -> Result<()> {
+        match self.trace.bv_symbols_map.get(&bv.get_id()){
+            None => {
+                panic!("Assigned a BV without a symbol.");
+            }
+            Some(_) => {}
+        }
+
         self.varmap
             .assign_bv_to_name(self.cur_loc.func.name.clone(), name, bv)
     }
@@ -885,7 +892,7 @@ where
     ) -> Result<()> {
         match self.trace.bv_symbols_map.get(&resultval.get_id()){
             None => {
-                println!("Registered a BV without a symbol.");
+                panic!("Registered a BV without a symbol.");
             }
             Some(_) => {}
         }

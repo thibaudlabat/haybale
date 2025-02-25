@@ -1574,6 +1574,8 @@ where
                 match self.symex_hook(call, &hook, &pretty_hookedthing, quiet)? {
                     // Assume that `symex_hook()` has taken care of validating the hook return value as necessary
                     ReturnValue::Return(retval) => {
+                        self.state.trace.bv_symbols_map.insert(retval.get_id(),RecordedValue::UnevaluatedFunctionReturnValue(call.to_string()));
+
                         // can't quite use `state.record_bv_result(call, retval)?` because Call is not HasResult
                         self.state
                             .assign_bv_to_name(call.dest.as_ref().unwrap().clone(), retval)?;
