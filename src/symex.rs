@@ -923,19 +923,8 @@ where
             ));
         }
 
-        match &load.address {
-            Operand::ConstantOperand(op_ref) => {
-                let op = op_ref.deref();
-                match op {
-                    Constant::GlobalReference { name, ty } => {
-                        let sym = RecordedValue::Global(op_ref.to_string());
-                        self.state.trace.bv_symbols_map.insert(bvaddr.get_id(), sym);
-                    }
-                    (_) => {}
-                }
-            }
-            (_) => {}
-        }
+        let bvaddr_sym = get_operand_symbol_or_unknown(&self.state, &load.address, "load");
+        self.state.trace.bv_symbols_map.insert(bvaddr.get_id(), bvaddr_sym);
 
         let mut r = self.state.read(&bvaddr, dest_size)?;
 
@@ -1110,8 +1099,7 @@ where
                         allocation_size_bits
                     };
                     let mut allocated = self.state.allocate(allocation_size_bits);
-                    let sym = format!("alloca({})", alloca.dest.to_string());
-                    self.state.trace.bv_symbols_map.insert(allocated.get_id(), RecordedValue::DebugString(sym));
+                    self.state.trace.bv_symbols_map.insert(allocated.get_id(), RecordedValue::Alloca(alloca.dest.to_string()));
                     self.state.record_bv_result(alloca, allocated)
                 },
                 c => Err(Error::UnsupportedInstruction(format!(
@@ -1524,7 +1512,8 @@ where
                     },
                     Operand::MetadataOperand(_) => {
                         // TODO?
-                        function_name = RecordedValue::DebugString("(metadata function)".to_string());
+                        // function_name = RecordedValue::DebugString("(metadata function)".to_string());
+                        panic!("MetadataOperand");
                     }
                 }
             }

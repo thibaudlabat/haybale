@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum RecordedValue {
-    DebugString(String),
+    Alloca(String),
     Unknown(String),
     Apply(Box<RecordedValue>, String),
     Constant(String),
@@ -53,7 +53,7 @@ impl PartialEq for RecordedValue {
             (_, RecordedValue::UnevaluatedFunctionReturnValue(_)) => false,
 
             // Normal equality comparisons for other variants
-            (RecordedValue::DebugString(s1), RecordedValue::DebugString(s2)) => s1 == s2,
+            (RecordedValue::Alloca(s1), RecordedValue::Alloca(s2)) => s1 == s2,
             (RecordedValue::Apply(v1, s1), RecordedValue::Apply(v2, s2)) => v1 == v2 && s1 == s2,
             (RecordedValue::Constant(s1), RecordedValue::Constant(s2)) => s1 == s2,
             (RecordedValue::Global(s1), RecordedValue::Global(s2)) => s1 == s2,
@@ -88,7 +88,7 @@ pub enum RecordedOperation {
 impl fmt::Display for RecordedValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RecordedValue::DebugString(s) => write!(f, "{s}"),
+            RecordedValue::Alloca(s) => write!(f, "{s}"),
             RecordedValue::Unknown(s) => write!(f, "[unknown: {s}]"),
             RecordedValue::Apply(left, right) =>
                 write!(f, "{left} {right}"),

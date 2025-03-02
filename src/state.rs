@@ -1547,6 +1547,9 @@ where
     /// Read a value `bits` bits long from memory at `addr`.
     /// Note that `bits` can be arbitrarily large.
     pub fn read(&mut self, addr: &B::BV, bits: u32) -> Result<B::BV> {
+        if let None = self.trace.bv_symbols_map.get(&addr.get_id()){
+            panic!("Read on a BV without symbols");
+        }
         let retval = match self.mem.borrow().read(addr, bits) {
             Ok(val) => val,
             e @ Err(Error::NullPointerDereference) => {
