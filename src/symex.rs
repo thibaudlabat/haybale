@@ -959,7 +959,13 @@ where
             }
         };
 
-        self.state.trace.recorded_operations.push(RecordedOperation::Write(index_symbol, value_symbol));
+        // Recording the store operation
+        self.state.trace.recorded_operations.push(RecordedOperation::Write(index_symbol, value_symbol.clone()));
+
+        // Also update symbols of the target value
+        // println!("{}",index_symbol);
+        self.state.trace.bv_symbols_map.insert(bvaddr.get_id(), value_symbol);
+
         self.state.write(&bvaddr, bvval)
     }
 
